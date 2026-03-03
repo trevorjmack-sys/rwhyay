@@ -66,6 +66,11 @@ header {
   flex-shrink: 0; position: relative; z-index: 10;
   box-shadow: 0 2px 20px rgba(0,0,0,0.6);
 }
+.hnic-logo {
+  height: 40px; width: auto;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px rgba(208,124,10,0.4));
+}
 .hdr-stripe {
   width: 5px; height: 34px; border-radius: 2px;
   background: var(--amber);
@@ -81,6 +86,15 @@ header {
   font-size: 10px; letter-spacing: 1.5px; color: var(--amber);
   text-transform: uppercase; font-weight: 500;
 }
+.hdr-search {
+  flex: 1; max-width: 220px; min-width: 100px;
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: 3px; padding: 5px 10px;
+  color: var(--text); font-size: 12px; outline: none;
+  transition: border-color 0.15s;
+}
+.hdr-search::placeholder { color: var(--muted); }
+.hdr-search:focus { border-color: var(--amber-lo); }
 .hdr-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
 .hdr-badge {
   font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
@@ -214,6 +228,14 @@ thead tr.cols th.left { text-align: left; }
 thead tr.cols th.nhl-col { background: var(--nhl-zone); color: var(--amber-lo); }
 thead tr.cols th.fant-col { background: var(--fant-zone); color: #4a6090; }
 
+/* ── Sortable column headers ─────────────────────────────────────────────── */
+thead tr.cols th.sortable { cursor: pointer; user-select: none; }
+thead tr.cols th.sortable:hover { color: var(--amber-hi); }
+thead tr.cols th.sort-asc  { color: var(--amber-hi) !important; }
+thead tr.cols th.sort-desc { color: var(--amber-hi) !important; }
+thead tr.cols th.sort-asc::after  { content: ' ▲'; font-size: 8px; opacity: 0.8; }
+thead tr.cols th.sort-desc::after { content: ' ▼'; font-size: 8px; opacity: 0.8; }
+
 /* Data rows */
 tbody tr { border-top: 1px solid var(--border); }
 tbody tr:hover { background: var(--surface); }
@@ -288,16 +310,24 @@ tbody td.fant-col { background: var(--fant-zone); }
 .team-card .card-foot { display: flex; justify-content: space-between; margin-top: 8px; align-items: baseline; }
 .team-card .card-ov { font-size: 18px; font-weight: 800; color: var(--amber-hi); }
 .team-card .card-farm { font-size: 10px; color: var(--muted); }
+
+/* ── Search results ──────────────────────────────────────────────────────── */
+.search-count { color: var(--muted); font-size: 12px; letter-spacing: 0.5px; margin-bottom: 16px; }
+.search-hit-row { cursor: pointer; }
+.search-hit-row:hover { background: var(--surface) !important; }
 </style>
 </head>
 <body>
 
 <header>
+  <img src="https://cdn.freebiesupply.com/logos/large/2x/hockey-night-in-canada-1-logo-png-transparent.png"
+       class="hnic-logo" alt="Hockey Night in Canada">
   <div class="hdr-stripe"></div>
   <div class="hdr-title">
     <h1>RWHA</h1>
     <span class="hdr-sub">Soirée des Statistiques</span>
   </div>
+  <input type="search" id="player-search" class="hdr-search" placeholder="Search players…" autocomplete="off">
   <div class="hdr-right">
     <span class="hdr-badge" id="hdr-badge">22 teams</span>
     <span class="hdr-badge" id="hdr-nhl-status">NHL stats loading…</span>
@@ -316,6 +346,103 @@ tbody td.fant-col { background: var(--fant-zone); }
 const D  = window.RWHA_DATA;
 const NS = window.NHL_STATS || {};
 const TEAMS = Object.keys(D).sort();
+
+// ── Sort state ─────────────────────────────────────────────────────────────
+const _state = {
+  skaters: [],
+  goalies: [],
+  sSort: { col: null, dir: -1 },
+  gSort: { col: null, dir: -1 },
+};
+
+// Sort value getters indexed by th column position — skaters (31 cols)
+const SKATER_SORT = [
+  p => parseInt(p.n)   || 0,                                        // 0: #
+  p => cleanNHLKey(p.nm).toLowerCase(),                             // 1: Player
+  p => p.p || '',                                                    // 2: Pos
+  p => parseInt(p.ov)  || 0,                                        // 3: OV
+  p => parseInt(p._ns.gp)  || 0,                                    // 4: GP
+  p => parseInt(p._ns.g)   || 0,                                    // 5: G
+  p => parseInt(p._ns.a)   || 0,                                    // 6: A
+  p => parseInt(p._ns.pts) || 0,                                    // 7: PTS
+  p => parseInt(p._ns.pm)  || 0,                                    // 8: +/-
+  p => parseInt(p._ns.pim) || 0,                                    // 9: PIM
+  p => parseInt(p._ns.sog) || 0,                                    // 10: SOG
+  p => parseInt(p.ck)  || 0,                                        // 11: CK
+  p => parseInt(p.fg)  || 0,                                        // 12: FG
+  p => parseInt(p.di)  || 0,                                        // 13: DI
+  p => parseInt(p.sk)  || 0,                                        // 14: SK
+  p => parseInt(p.st)  || 0,                                        // 15: ST
+  p => parseInt(p.en)  || 0,                                        // 16: EN
+  p => parseInt(p.du)  || 0,                                        // 17: DU
+  p => parseInt(p.ph)  || 0,                                        // 18: PH
+  p => parseInt(p.fo)  || 0,                                        // 19: FO
+  p => parseInt(p.pa)  || 0,                                        // 20: PA
+  p => parseInt(p.sc)  || 0,                                        // 21: SC
+  p => parseInt(p.df)  || 0,                                        // 22: DF
+  p => parseInt(p.ps)  || 0,                                        // 23: PS
+  p => parseInt(p.ex)  || 0,                                        // 24: EX
+  p => parseInt(p.ld)  || 0,                                        // 25: LD
+  p => parseInt(p.po)  || 0,                                        // 26: PO
+  p => parseInt(p.mo)  || 0,                                        // 27: MO
+  p => parseFloat((p.sal || '').replace(/[^0-9.]/g, '')) || 0,     // 28: Salary
+  p => parseInt(p.age) || 0,                                        // 29: Age
+  p => parseInt(p.c)   || 0,                                        // 30: Ctr
+];
+
+// Sort value getters — goalies (27 cols)
+const GOALIE_SORT = [
+  g => cleanNHLKey(g.nm).toLowerCase(),                             // 0: Goalie
+  g => parseInt(g.ov)  || 0,                                        // 1: OV
+  g => parseInt(g._ns.gp)  || 0,                                    // 2: GP
+  g => parseInt(g._ns.w)   || 0,                                    // 3: W
+  g => parseInt(g._ns.l)   || 0,                                    // 4: L
+  g => parseInt(g._ns.ot)  || 0,                                    // 5: OT
+  g => parseFloat(g._ns.gaa) || 0,                                  // 6: GAA
+  g => parseFloat(g._ns.svp) || 0,                                  // 7: SV%
+  g => parseInt(g._ns.so)  || 0,                                    // 8: SO
+  g => parseInt(g.sk)  || 0,                                        // 9: SK
+  g => parseInt(g.ag)  || 0,                                        // 10: AG
+  g => parseInt(g.en)  || 0,                                        // 11: EN
+  g => parseInt(g.du)  || 0,                                        // 12: DU
+  g => parseInt(g.sz)  || 0,                                        // 13: SZ
+  g => parseInt(g.rb)  || 0,                                        // 14: RB
+  g => parseInt(g.sc)  || 0,                                        // 15: SC
+  g => parseInt(g.hs)  || 0,                                        // 16: HS
+  g => parseInt(g.rt)  || 0,                                        // 17: RT
+  g => parseInt(g.ph)  || 0,                                        // 18: PH
+  g => parseInt(g.ps)  || 0,                                        // 19: PS
+  g => parseInt(g.ex)  || 0,                                        // 20: EX
+  g => parseInt(g.ld)  || 0,                                        // 21: LD
+  g => parseInt(g.po)  || 0,                                        // 22: PO
+  g => parseInt(g.mo)  || 0,                                        // 23: MO
+  g => parseFloat((g.sal || '').replace(/[^0-9.]/g, '')) || 0,     // 24: Salary
+  g => parseInt(g.age) || 0,                                        // 25: Age
+  g => parseInt(g.c)   || 0,                                        // 26: Ctr
+];
+
+// ── Player index for global search ─────────────────────────────────────────
+let _playerIndex = [];
+
+function buildPlayerIndex() {
+  _playerIndex = [];
+  TEAMS.forEach(team => {
+    const t = D[team];
+    const push = (arr, type, isGoalie) => (arr || []).forEach(p => _playerIndex.push({
+      cleanNm: cleanNHLKey(p.nm).toLowerCase(),
+      nm: p.nm, sp: p.sp, ij: p.ij,
+      team, type,
+      pos: isGoalie ? 'G' : (p.p || ''),
+      ov: p.ov,
+      _ns: nhlLookup(p.nm),
+      isGoalie,
+    }));
+    push(t.ps, 'pro',  false);
+    push(t.pg, 'pro',  true);
+    push(t.fs, 'farm', false);
+    push(t.fg, 'farm', true);
+  });
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function ovClass(v) {
@@ -375,52 +502,161 @@ function fsCell(v, lo=55, hi=78) {
   else if (n <= lo) cls += ' lo';
   return `<td class="fant-col ${cls}">${v}</td>`;
 }
-function fsText(v) {
-  return `<td class="fant-col" style="color:var(--muted)">${v||'—'}</td>`;
+
+// ── Single-row render functions ────────────────────────────────────────────
+function skaterRow(p) {
+  const ns = p._ns;
+  return `<tr>
+    <td class="left" style="color:var(--muted);font-size:11px;min-width:22px">${p.n}</td>
+    <td class="left" style="min-width:160px">${nameTags(p.nm, p.sp)}${ijTag(p.ij)}</td>
+    <td class="left"><span class="pos">${p.p}</span></td>
+    <td>${ovPill(p.ov)}</td>
+    ${nhlCell(ns.gp)}
+    ${nhlCell(ns.g, 'nhl-g')}
+    ${nhlCell(ns.a, 'nhl-a')}
+    ${nhlCell(ns.pts,'nhl-pts')}
+    ${pmCell(ns.pm)}
+    ${nhlCell(ns.pim)}
+    ${nhlCell(ns.sog)}
+    ${fsCell(p.ck)}
+    ${fsCell(p.fg)}
+    ${fsCell(p.di)}
+    ${fsCell(p.sk)}
+    ${fsCell(p.st)}
+    ${fsCell(p.en)}
+    ${fsCell(p.du)}
+    ${fsCell(p.ph)}
+    ${fsCell(p.fo)}
+    ${fsCell(p.pa)}
+    ${fsCell(p.sc)}
+    ${fsCell(p.df)}
+    ${fsCell(p.ps)}
+    ${fsCell(p.ex)}
+    ${fsCell(p.ld)}
+    ${fsCell(p.po)}
+    ${fsCell(p.mo, 85, 92)}
+    <td class="sal">${p.sal||'—'}</td>
+    <td class="age">${p.age}</td>
+    <td style="color:var(--muted)">${p.c}yr</td>
+  </tr>`;
+}
+
+function goalieRow(g) {
+  const ns = g._ns;
+  const svp = ns.svp ? parseFloat(ns.svp).toFixed(3) : '';
+  const gaa = ns.gaa ? parseFloat(ns.gaa).toFixed(2) : '';
+  return `<tr>
+    <td class="left" style="min-width:160px">${nameTags(g.nm, g.sp)}${ijTag(g.ij)}</td>
+    <td>${ovPill(g.ov)}</td>
+    ${nhlCell(ns.gp)}
+    ${nhlCell(ns.w)}
+    ${nhlCell(ns.l)}
+    ${nhlCell(ns.ot)}
+    ${nhlCell(gaa)}
+    ${nhlCell(svp)}
+    ${nhlCell(ns.so)}
+    ${fsCell(g.sk, 55, 80)}
+    ${fsCell(g.ag, 55, 80)}
+    ${fsCell(g.en, 55, 80)}
+    ${fsCell(g.du, 55, 80)}
+    ${fsCell(g.sz, 55, 80)}
+    ${fsCell(g.rb, 55, 80)}
+    ${fsCell(g.sc, 55, 80)}
+    ${fsCell(g.hs, 55, 80)}
+    ${fsCell(g.rt, 55, 80)}
+    ${fsCell(g.ph, 55, 80)}
+    ${fsCell(g.ps, 55, 80)}
+    ${fsCell(g.ex, 55, 80)}
+    ${fsCell(g.ld, 55, 80)}
+    ${fsCell(g.po, 55, 80)}
+    ${fsCell(g.mo, 85, 92)}
+    <td class="sal">${g.sal||'—'}</td>
+    <td class="age">${g.age}</td>
+    <td style="color:var(--muted)">${g.c}yr</td>
+  </tr>`;
+}
+
+// ── Sorted body HTML ───────────────────────────────────────────────────────
+function skaterBody() {
+  let sorted = [..._state.skaters];
+  const { col, dir } = _state.sSort;
+  if (col !== null) {
+    const get = SKATER_SORT[col];
+    sorted.sort((a, b) => {
+      const av = get(a), bv = get(b);
+      if (av < bv) return dir;
+      if (av > bv) return -dir;
+      return 0;
+    });
+  }
+  return sorted.map(skaterRow).join('');
+}
+
+function goalieBody() {
+  let sorted = [..._state.goalies];
+  const { col, dir } = _state.gSort;
+  if (col !== null) {
+    const get = GOALIE_SORT[col];
+    sorted.sort((a, b) => {
+      const av = get(a), bv = get(b);
+      if (av < bv) return dir;
+      if (av > bv) return -dir;
+      return 0;
+    });
+  }
+  return sorted.map(goalieRow).join('');
+}
+
+// ── Attach sort click handlers after table render ──────────────────────────
+function attachSortHandlers() {
+  const sTbl = document.getElementById('skater-tbl');
+  if (sTbl) {
+    const ths = sTbl.querySelectorAll('thead tr.cols th');
+    ths.forEach((th, i) => {
+      if (!SKATER_SORT[i]) return;
+      th.classList.add('sortable');
+      th.addEventListener('click', () => {
+        if (_state.sSort.col === i) {
+          _state.sSort.dir *= -1;
+        } else {
+          _state.sSort.col = i;
+          _state.sSort.dir = -1;
+        }
+        ths.forEach(t => t.classList.remove('sort-asc', 'sort-desc'));
+        th.classList.add(_state.sSort.dir === 1 ? 'sort-asc' : 'sort-desc');
+        sTbl.querySelector('tbody').innerHTML = skaterBody();
+      });
+    });
+  }
+
+  const gTbl = document.getElementById('goalie-tbl');
+  if (gTbl) {
+    const ths = gTbl.querySelectorAll('thead tr.cols th');
+    ths.forEach((th, i) => {
+      if (!GOALIE_SORT[i]) return;
+      th.classList.add('sortable');
+      th.addEventListener('click', () => {
+        if (_state.gSort.col === i) {
+          _state.gSort.dir *= -1;
+        } else {
+          _state.gSort.col = i;
+          _state.gSort.dir = -1;
+        }
+        ths.forEach(t => t.classList.remove('sort-asc', 'sort-desc'));
+        th.classList.add(_state.gSort.dir === 1 ? 'sort-asc' : 'sort-desc');
+        gTbl.querySelector('tbody').innerHTML = goalieBody();
+      });
+    });
+  }
 }
 
 // ── Skater table ──────────────────────────────────────────────────────────
 function skaterTable(players) {
   if (!players || !players.length) return '<p style="color:var(--muted);padding:14px">No players</p>';
+  _state.skaters = players.map(p => ({ ...p, _ns: nhlLookup(p.nm) }));
+  _state.sSort = { col: null, dir: -1 };
 
-  const rows = players.map(p => {
-    const ns = nhlLookup(p.nm);
-    return `<tr>
-      <td class="left" style="color:var(--muted);font-size:11px;min-width:22px">${p.n}</td>
-      <td class="left" style="min-width:160px">${nameTags(p.nm, p.sp)}${ijTag(p.ij)}</td>
-      <td class="left"><span class="pos">${p.p}</span></td>
-      <td>${ovPill(p.ov)}</td>
-      ${nhlCell(ns.gp)}
-      ${nhlCell(ns.g, 'nhl-g')}
-      ${nhlCell(ns.a, 'nhl-a')}
-      ${nhlCell(ns.pts,'nhl-pts')}
-      ${pmCell(ns.pm)}
-      ${nhlCell(ns.pim)}
-      ${nhlCell(ns.sog)}
-      ${fsCell(p.ck)}
-      ${fsCell(p.fg)}
-      ${fsCell(p.di)}
-      ${fsCell(p.sk)}
-      ${fsCell(p.st)}
-      ${fsCell(p.en)}
-      ${fsCell(p.du)}
-      ${fsCell(p.ph)}
-      ${fsCell(p.fo)}
-      ${fsCell(p.pa)}
-      ${fsCell(p.sc)}
-      ${fsCell(p.df)}
-      ${fsCell(p.ps)}
-      ${fsCell(p.ex)}
-      ${fsCell(p.ld)}
-      ${fsCell(p.po)}
-      ${fsCell(p.mo, 85, 92)}
-      <td class="sal">${p.sal||'—'}</td>
-      <td class="age">${p.age}</td>
-      <td style="color:var(--muted)">${p.c}yr</td>
-    </tr>`;
-  }).join('');
-
-  return `<div class="tbl-wrap"><table>
+  return `<div class="tbl-wrap"><table id="skater-tbl">
     <thead>
       <tr class="grp">
         <th class="g-info" colspan="4"></th>
@@ -462,50 +698,17 @@ function skaterTable(players) {
         <th>Ctr</th>
       </tr>
     </thead>
-    <tbody>${rows}</tbody>
+    <tbody>${skaterBody()}</tbody>
   </table></div>`;
 }
 
 // ── Goalie table ──────────────────────────────────────────────────────────
 function goalieTable(goalies) {
   if (!goalies || !goalies.length) return '<p style="color:var(--muted);padding:14px">No goalies</p>';
+  _state.goalies = goalies.map(g => ({ ...g, _ns: nhlLookup(g.nm) }));
+  _state.gSort = { col: null, dir: -1 };
 
-  const rows = goalies.map(g => {
-    const ns = nhlLookup(g.nm);
-    const svp = ns.svp ? parseFloat(ns.svp).toFixed(3) : '';
-    const gaa = ns.gaa ? parseFloat(ns.gaa).toFixed(2) : '';
-    return `<tr>
-      <td class="left" style="min-width:160px">${nameTags(g.nm, g.sp)}${ijTag(g.ij)}</td>
-      <td>${ovPill(g.ov)}</td>
-      ${nhlCell(ns.gp)}
-      ${nhlCell(ns.w)}
-      ${nhlCell(ns.l)}
-      ${nhlCell(ns.ot)}
-      ${nhlCell(gaa)}
-      ${nhlCell(svp)}
-      ${nhlCell(ns.so)}
-      ${fsCell(g.sk, 55, 80)}
-      ${fsCell(g.ag, 55, 80)}
-      ${fsCell(g.en, 55, 80)}
-      ${fsCell(g.du, 55, 80)}
-      ${fsCell(g.sz, 55, 80)}
-      ${fsCell(g.rb, 55, 80)}
-      ${fsCell(g.sc, 55, 80)}
-      ${fsCell(g.hs, 55, 80)}
-      ${fsCell(g.rt, 55, 80)}
-      ${fsCell(g.ph, 55, 80)}
-      ${fsCell(g.ps, 55, 80)}
-      ${fsCell(g.ex, 55, 80)}
-      ${fsCell(g.ld, 55, 80)}
-      ${fsCell(g.po, 55, 80)}
-      ${fsCell(g.mo, 85, 92)}
-      <td class="sal">${g.sal||'—'}</td>
-      <td class="age">${g.age}</td>
-      <td style="color:var(--muted)">${g.c}yr</td>
-    </tr>`;
-  }).join('');
-
-  return `<div class="tbl-wrap"><table>
+  return `<div class="tbl-wrap"><table id="goalie-tbl">
     <thead>
       <tr class="grp">
         <th class="g-info" colspan="2"></th>
@@ -543,7 +746,7 @@ function goalieTable(goalies) {
         <th>Ctr</th>
       </tr>
     </thead>
-    <tbody>${rows}</tbody>
+    <tbody>${goalieBody()}</tbody>
   </table></div>`;
 }
 
@@ -602,6 +805,68 @@ function renderRoster(team, type) {
       <div class="sect-title">Goalies</div>
       ${goalieTable(goalies)}
     </div>`;
+
+  attachSortHandlers();
+}
+
+// ── Global search ──────────────────────────────────────────────────────────
+function renderSearch(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) { renderHome(); return; }
+
+  const results = _playerIndex.filter(p => p.cleanNm.includes(q));
+
+  if (!results.length) {
+    document.getElementById('main').innerHTML = `
+      <div class="home">
+        <h2>Search</h2>
+        <p style="color:var(--muted);margin-top:8px">No players found matching "<strong style="color:var(--text)">${query}</strong>"</p>
+      </div>`;
+    return;
+  }
+
+  // Sort by OV descending
+  results.sort((a, b) => (parseInt(b.ov) || 0) - (parseInt(a.ov) || 0));
+
+  const rows = results.map(r => {
+    const ns  = r._ns;
+    const gp  = ns.gp  !== undefined ? ns.gp  : '—';
+    const pts = ns.pts !== undefined ? ns.pts : '—';
+    return `<tr class="search-hit-row" onclick="navigate('${r.team}','${r.type}')">
+      <td class="left" style="min-width:160px">${nameTags(r.nm, r.sp)}${ijTag(r.ij)}</td>
+      <td class="left"><span class="pos">${r.pos}</span></td>
+      <td class="left" style="color:var(--amber);font-weight:700">${r.team}</td>
+      <td class="left"><span class="roster-tag ${r.type}" style="font-size:9px;padding:2px 6px">${r.type}</span></td>
+      <td>${ovPill(r.ov)}</td>
+      <td class="nhl-col">${gp}</td>
+      <td class="nhl-col nhl-pts">${pts}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('main').innerHTML = `
+    <div class="home">
+      <h2>Search</h2>
+      <p class="search-count">${results.length} player${results.length !== 1 ? 's' : ''} matching "<strong style="color:var(--text)">${query}</strong>"</p>
+      <div class="tbl-wrap"><table>
+        <thead>
+          <tr class="grp">
+            <th class="g-info" colspan="4"></th>
+            <th class="g-info" colspan="1"></th>
+            <th class="g-nhl"  colspan="2">NHL 2025-26</th>
+          </tr>
+          <tr class="cols">
+            <th class="left">Player</th>
+            <th class="left">Pos</th>
+            <th class="left">Team</th>
+            <th class="left">Roster</th>
+            <th>OV</th>
+            <th class="nhl-col">GP</th>
+            <th class="nhl-col">PTS</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
 }
 
 // ── Home screen ───────────────────────────────────────────────────────────
@@ -653,6 +918,7 @@ function toggleTeam(t) {
 
 // ── Navigation ─────────────────────────────────────────────────────────────
 function navigate(team, type) {
+  document.getElementById('player-search').value = '';
   document.querySelectorAll('.nav-link.active').forEach(el => el.classList.remove('active'));
   const link = document.getElementById(`nl-${team}-${type}`);
   if (link) { link.classList.add('active'); }
@@ -664,12 +930,24 @@ function navigate(team, type) {
 // ── Init ───────────────────────────────────────────────────────────────────
 function init() {
   buildSidebar();
+  buildPlayerIndex();
 
   // NHL stats status badge
   const matched = Object.values(NS).filter(v => Object.keys(v).length > 0).length;
   const total   = Object.keys(NS).length;
   document.getElementById('hdr-nhl-status').textContent =
     `NHL: ${matched}/${total} players`;
+
+  // Search handler
+  let _searchTimeout;
+  document.getElementById('player-search').addEventListener('input', function() {
+    clearTimeout(_searchTimeout);
+    const q = this.value;
+    _searchTimeout = setTimeout(() => {
+      document.querySelectorAll('.nav-link.active').forEach(el => el.classList.remove('active'));
+      renderSearch(q);
+    }, 150);
+  });
 
   const hash = window.location.hash.slice(1);
   if (hash) {
