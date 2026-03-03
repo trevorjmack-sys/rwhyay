@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RWHA — Soirée des statistiques</title>
+<style>
+/* ── Reset ────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── 1970s Hockey Night in Canada / Soirée du Hockey palette ────────── */
+:root {
+  /* Broadcast darkness — deep navy like a cathode-ray screen */
+  --bg:        #060c18;
+  --sidebar:   #0a0d1e;
+  --surface:   #0f1728;
+  --surface2:  #182038;
+  --border:    #1e2a50;
+  --border2:   #2a3868;
+
+  /* The iconic HNIC amber — the score-box glow */
+  --amber:     #d07c0a;
+  --amber-hi:  #f0a000;
+  --amber-lo:  #7a4a06;
+  --amber-bg:  rgba(208,124,10,0.12);
+
+  /* CBC Red — the network stripe */
+  --red:       #c81400;
+  --red-dim:   #7a0c00;
+
+  /* Typography — warm cream like a 1970s TV screen */
+  --text:      #ede0c0;
+  --muted:     #7a7060;
+  --ice:       #f0e4c4;   /* warm ice — headings */
+  --dim:       #3a3828;
+
+  /* OV tier colours */
+  --ov-elite:  #f0a000;
+  --ov-good:   #64b8e8;
+  --ov-avg:    #7a7060;
+  --ov-poor:   #b84030;
+
+  /* Stat zone tints */
+  --nhl-zone:  rgba(208,124,10,0.07);
+  --fant-zone: rgba(30,42,80,0.6);
+
+  --sidebar-w: 228px;
+  --hdr-h:     56px;
+}
+
+html, body { height: 100%; overflow: hidden; }
+body {
+  display: flex; flex-direction: column;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  background: var(--bg); color: var(--text);
+  font-size: 13px;
+}
+
+/* ── Header — broadcast lower-third style ─────────────────────────────── */
+header {
+  height: var(--hdr-h);
+  background: var(--sidebar);
+  border-bottom: 3px solid var(--red);
+  display: flex; align-items: center;
+  padding: 0 18px; gap: 14px;
+  flex-shrink: 0; position: relative; z-index: 10;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.6);
+}
+.hdr-stripe {
+  width: 5px; height: 34px; border-radius: 2px;
+  background: var(--amber);
+}
+.hdr-title {
+  display: flex; flex-direction: column; gap: 1px;
+}
+.hdr-title h1 {
+  font-size: 20px; font-weight: 800; letter-spacing: 2px;
+  color: var(--ice); text-transform: uppercase;
+}
+.hdr-title .hdr-sub {
+  font-size: 10px; letter-spacing: 1.5px; color: var(--amber);
+  text-transform: uppercase; font-weight: 500;
+}
+.hdr-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+.hdr-badge {
+  font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--muted); border: 1px solid var(--border2);
+  padding: 3px 8px; border-radius: 3px;
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+.layout { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+nav {
+  width: var(--sidebar-w);
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+  overflow-y: auto; flex-shrink: 0;
+}
+nav::-webkit-scrollbar { width: 4px; }
+nav::-webkit-scrollbar-thumb { background: var(--border2); }
+
+.nav-section { padding: 10px 0 4px; }
+.nav-heading {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1.5px; color: var(--amber-lo);
+  padding: 3px 12px 6px; border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.nav-team { }
+.nav-team-name {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px; cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background 0.1s, border-color 0.1s;
+}
+.nav-team-name:hover { background: var(--surface); border-left-color: var(--amber-lo); }
+.nav-team-name .tnm { font-weight: 700; font-size: 12px; color: var(--text); flex: 1; }
+.nav-team-name .tov { font-size: 10px; color: var(--amber); font-weight: 700; }
+.nav-sub { display: none; }
+.nav-sub.open { display: block; }
+.nav-link {
+  display: block; padding: 3px 12px 3px 22px;
+  font-size: 11px; color: var(--muted); cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: color 0.1s, background 0.1s;
+  text-decoration: none;
+}
+.nav-link:hover { color: var(--amber-hi); background: var(--surface); }
+.nav-link.active {
+  color: var(--amber-hi);
+  border-left-color: var(--amber);
+  background: var(--amber-bg);
+}
+
+/* ── Main ─────────────────────────────────────────────────────────────────── */
+main {
+  flex: 1; overflow-y: auto; padding: 22px 24px;
+  background: var(--bg);
+}
+main::-webkit-scrollbar { width: 6px; }
+main::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* ── Roster header ───────────────────────────────────────────────────────── */
+.roster-hdr {
+  display: flex; align-items: baseline; gap: 14px;
+  margin-bottom: 16px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.roster-hdr h2 {
+  font-size: 24px; font-weight: 800; color: var(--ice);
+  letter-spacing: 0.5px; text-transform: uppercase;
+}
+.roster-tag {
+  font-size: 10px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; padding: 3px 9px; border-radius: 3px;
+}
+.roster-tag.pro  { background: rgba(200,20,0,0.2); color: var(--red); border: 1px solid var(--red-dim); }
+.roster-tag.farm { background: rgba(100,184,232,0.1); color: #64b8e8; border: 1px solid #1e3a58; }
+
+.roster-meta {
+  display: flex; gap: 28px; margin-bottom: 20px; flex-wrap: wrap;
+  padding: 14px 16px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.meta-item { display: flex; flex-direction: column; gap: 3px; }
+.meta-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+.meta-val { font-size: 15px; font-weight: 700; color: var(--text); }
+.meta-val.big { font-size: 26px; color: var(--amber-hi); line-height: 1; }
+
+/* ── Roster section ─────────────────────────────────────────────────────── */
+.roster-sect { margin-bottom: 32px; }
+.sect-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1.5px; color: var(--muted);
+  margin-bottom: 8px; padding-left: 2px;
+  display: flex; align-items: center; gap: 8px;
+}
+.sect-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+.tbl-wrap { overflow-x: auto; border-radius: 4px; border: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+
+/* Column group headers */
+thead tr.grp th {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1px; padding: 4px 8px; text-align: center;
+  border-bottom: none;
+}
+thead tr.grp th.g-info { background: var(--surface); color: var(--muted); }
+thead tr.grp th.g-nhl  {
+  background: rgba(208,124,10,0.22); color: var(--amber-hi);
+  border-bottom: 2px solid var(--amber);
+}
+thead tr.grp th.g-fant {
+  background: rgba(30,40,80,0.8); color: #64b8e8;
+  border-bottom: 2px solid #2a4080;
+}
+thead tr.grp th.g-admin { background: var(--surface); color: var(--muted); }
+
+/* Column headers */
+thead tr.cols th {
+  background: var(--surface2); color: var(--muted);
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.5px; padding: 6px 8px;
+  white-space: nowrap; text-align: right;
+  border-top: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 2;
+}
+thead tr.cols th.left { text-align: left; }
+thead tr.cols th.nhl-col { background: var(--nhl-zone); color: var(--amber-lo); }
+thead tr.cols th.fant-col { background: var(--fant-zone); color: #4a6090; }
+
+/* Data rows */
+tbody tr { border-top: 1px solid var(--border); }
+tbody tr:hover { background: var(--surface); }
+tbody td { padding: 5px 8px; white-space: nowrap; text-align: right; vertical-align: middle; }
+tbody td.left { text-align: left; }
+tbody td.nhl-col { background: var(--nhl-zone); }
+tbody td.fant-col { background: var(--fant-zone); }
+
+/* OV pill */
+.ov {
+  display: inline-block; min-width: 28px; padding: 2px 5px;
+  border-radius: 3px; font-weight: 800; font-size: 11px;
+  text-align: center; letter-spacing: 0.5px;
+}
+.ov.elite { background: rgba(240,160,0,0.2); color: var(--ov-elite); }
+.ov.good  { background: rgba(100,184,232,0.15); color: var(--ov-good); }
+.ov.avg   { background: rgba(122,112,96,0.15); color: var(--ov-avg); }
+.ov.poor  { background: rgba(184,64,48,0.15); color: var(--ov-poor); }
+
+/* Player name cell */
+.pnm { color: var(--ice); font-weight: 600; }
+.tag { font-size: 9px; font-weight: 800; margin-left: 3px; vertical-align: middle; }
+.tag.r { color: #50d080; }
+.tag.c { color: var(--amber); }
+.tag.a { color: var(--amber-lo); }
+.tag.ij { color: var(--red); }
+.tag.sp1 { color: #f0a000; }
+.tag.sp2 { color: #f0a000; letter-spacing: -1px; }
+
+/* Position */
+.pos { color: var(--muted); font-size: 10px; font-weight: 600; min-width: 36px; text-align: left; }
+
+/* NHL stat cells */
+.nhl-pts { color: var(--amber-hi); font-weight: 700; }
+.nhl-g   { color: var(--text); }
+.nhl-a   { color: var(--text); }
+.nhl-pm.pos-val { color: #50d080; }
+.nhl-pm.neg-val { color: var(--red); }
+.nhl-blank { color: var(--border2); font-size: 10px; }
+
+/* Fantasy stat cells */
+.fs { color: var(--muted); }
+.fs.hi { color: var(--text); font-weight: 600; }
+.fs.lo { color: var(--dim); }
+
+/* Salary / admin */
+.sal { color: var(--muted); font-size: 11px; }
+.age { color: var(--muted); }
+
+/* NHL loading spinner */
+.nhl-loading { color: var(--amber-lo); font-size: 10px; animation: blink 1.4s step-end infinite; }
+@keyframes blink { 50% { opacity: 0.3; } }
+
+/* ── Home screen ─────────────────────────────────────────────────────────── */
+.home h2 {
+  font-size: 28px; font-weight: 800; color: var(--ice);
+  text-transform: uppercase; letter-spacing: 2px;
+  margin-bottom: 6px;
+}
+.home .home-sub { color: var(--amber); font-size: 12px; letter-spacing: 1px; margin-bottom: 24px; }
+.team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(188px,1fr)); gap: 8px; }
+.team-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--amber-lo);
+  border-radius: 3px; padding: 12px 14px;
+  cursor: pointer; transition: border-color 0.15s, background 0.15s;
+}
+.team-card:hover { border-top-color: var(--amber); background: var(--surface2); }
+.team-card h3 { font-size: 14px; font-weight: 800; color: var(--ice); text-transform: uppercase; letter-spacing: 0.5px; }
+.team-card .card-gm { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.team-card .card-foot { display: flex; justify-content: space-between; margin-top: 8px; align-items: baseline; }
+.team-card .card-ov { font-size: 18px; font-weight: 800; color: var(--amber-hi); }
+.team-card .card-farm { font-size: 10px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr-stripe"></div>
+  <div class="hdr-title">
+    <h1>RWHA</h1>
+    <span class="hdr-sub">Soirée des Statistiques</span>
+  </div>
+  <div class="hdr-right">
+    <span class="hdr-badge" id="hdr-badge">22 teams</span>
+    <span class="hdr-badge" id="hdr-nhl-status">NHL stats loading…</span>
+  </div>
+</header>
+
+<div class="layout">
+  <nav id="sidebar"></nav>
+  <main id="main"></main>
+</div>
+
+<script src="data.js"></script>
+<script src="nhl_stats.js"></script>
+<script>
+'use strict';
+const D  = window.RWHA_DATA;
+const NS = window.NHL_STATS || {};
+const TEAMS = Object.keys(D).sort();
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function ovClass(v) {
+  const n = parseInt(v, 10);
+  if (n >= 85) return 'elite';
+  if (n >= 75) return 'good';
+  if (n >= 65) return 'avg';
+  return 'poor';
+}
+function ovPill(v) {
+  return `<span class="ov ${ovClass(v)}">${v}</span>`;
+}
+
+function cleanNHLKey(nm) {
+  return nm.replace(/\s*\([RCA]\)/g, '').trim();
+}
+
+function nhlLookup(nm) {
+  return NS[cleanNHLKey(nm)] || {};
+}
+
+function nameTags(nm, sp) {
+  let n = nm, tags = '';
+  if (n.includes('(R)')) { n = n.replace('(R)',''); tags += '<span class="tag r">R</span>'; }
+  if (n.includes('(C)')) { n = n.replace('(C)',''); tags += '<span class="tag c">C</span>'; }
+  if (n.includes('(A)')) { n = n.replace('(A)',''); tags += '<span class="tag a">A</span>'; }
+  if (sp === '2') tags += '<span class="tag sp2">★★</span>';
+  else if (sp === '1') tags += '<span class="tag sp1">★</span>';
+  return `<span class="pnm">${n.trim()}</span>${tags}`;
+}
+
+function ijTag(ij) {
+  return (ij && ij !== '' && ij !== '0')
+    ? `<span class="tag ij">IJ${ij}</span>` : '';
+}
+
+// NHL stat cell
+function nhlCell(val, cls='') {
+  if (val === '' || val === undefined || val === null) {
+    return `<td class="nhl-col nhl-blank">—</td>`;
+  }
+  return `<td class="nhl-col ${cls}">${val}</td>`;
+}
+function pmCell(v) {
+  if (v === '' || v === undefined) return `<td class="nhl-col nhl-blank">—</td>`;
+  const cls = parseInt(v) >= 0 ? 'nhl-pm pos-val' : 'nhl-pm neg-val';
+  const display = parseInt(v) > 0 ? '+'+v : v;
+  return `<td class="nhl-col ${cls}">${display}</td>`;
+}
+
+// Fantasy stat cell
+function fsCell(v, lo=55, hi=78) {
+  if (!v || v === '') return `<td class="fant-col fs">—</td>`;
+  const n = parseInt(v,10);
+  let cls = 'fs';
+  if (n >= hi) cls += ' hi';
+  else if (n <= lo) cls += ' lo';
+  return `<td class="fant-col ${cls}">${v}</td>`;
+}
+function fsText(v) {
+  return `<td class="fant-col" style="color:var(--muted)">${v||'—'}</td>`;
+}
+
+// ── Skater table ──────────────────────────────────────────────────────────
+function skaterTable(players) {
+  if (!players || !players.length) return '<p style="color:var(--muted);padding:14px">No players</p>';
+
+  const rows = players.map(p => {
+    const ns = nhlLookup(p.nm);
+    return `<tr>
+      <td class="left" style="color:var(--muted);font-size:11px;min-width:22px">${p.n}</td>
+      <td class="left" style="min-width:160px">${nameTags(p.nm, p.sp)}${ijTag(p.ij)}</td>
+      <td class="left"><span class="pos">${p.p}</span></td>
+      <td>${ovPill(p.ov)}</td>
+      ${nhlCell(ns.gp)}
+      ${nhlCell(ns.g, 'nhl-g')}
+      ${nhlCell(ns.a, 'nhl-a')}
+      ${nhlCell(ns.pts,'nhl-pts')}
+      ${pmCell(ns.pm)}
+      ${nhlCell(ns.pim)}
+      ${nhlCell(ns.sog)}
+      ${fsCell(p.ck)}
+      ${fsCell(p.fg)}
+      ${fsCell(p.di)}
+      ${fsCell(p.sk)}
+      ${fsCell(p.st)}
+      ${fsCell(p.en)}
+      ${fsCell(p.du)}
+      ${fsCell(p.ph)}
+      ${fsCell(p.fo)}
+      ${fsCell(p.pa)}
+      ${fsCell(p.sc)}
+      ${fsCell(p.df)}
+      ${fsCell(p.ps)}
+      ${fsCell(p.ex)}
+      ${fsCell(p.ld)}
+      ${fsCell(p.po)}
+      ${fsCell(p.mo, 85, 92)}
+      <td class="sal">${p.sal||'—'}</td>
+      <td class="age">${p.age}</td>
+      <td style="color:var(--muted)">${p.c}yr</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="tbl-wrap"><table>
+    <thead>
+      <tr class="grp">
+        <th class="g-info" colspan="4"></th>
+        <th class="g-nhl"  colspan="7">NHL 2025-26</th>
+        <th class="g-fant" colspan="17">Fantasy</th>
+        <th class="g-admin" colspan="3"></th>
+      </tr>
+      <tr class="cols">
+        <th class="left">#</th>
+        <th class="left">Player</th>
+        <th class="left">Pos</th>
+        <th>OV</th>
+        <th class="nhl-col">GP</th>
+        <th class="nhl-col">G</th>
+        <th class="nhl-col">A</th>
+        <th class="nhl-col">PTS</th>
+        <th class="nhl-col">+/-</th>
+        <th class="nhl-col">PIM</th>
+        <th class="nhl-col">SOG</th>
+        <th class="fant-col">CK</th>
+        <th class="fant-col">FG</th>
+        <th class="fant-col">DI</th>
+        <th class="fant-col">SK</th>
+        <th class="fant-col">ST</th>
+        <th class="fant-col">EN</th>
+        <th class="fant-col">DU</th>
+        <th class="fant-col">PH</th>
+        <th class="fant-col">FO</th>
+        <th class="fant-col">PA</th>
+        <th class="fant-col">SC</th>
+        <th class="fant-col">DF</th>
+        <th class="fant-col">PS</th>
+        <th class="fant-col">EX</th>
+        <th class="fant-col">LD</th>
+        <th class="fant-col">PO</th>
+        <th class="fant-col">MO</th>
+        <th>Salary</th>
+        <th>Age</th>
+        <th>Ctr</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+// ── Goalie table ──────────────────────────────────────────────────────────
+function goalieTable(goalies) {
+  if (!goalies || !goalies.length) return '<p style="color:var(--muted);padding:14px">No goalies</p>';
+
+  const rows = goalies.map(g => {
+    const ns = nhlLookup(g.nm);
+    const svp = ns.svp ? parseFloat(ns.svp).toFixed(3) : '';
+    const gaa = ns.gaa ? parseFloat(ns.gaa).toFixed(2) : '';
+    return `<tr>
+      <td class="left" style="min-width:160px">${nameTags(g.nm, g.sp)}${ijTag(g.ij)}</td>
+      <td>${ovPill(g.ov)}</td>
+      ${nhlCell(ns.gp)}
+      ${nhlCell(ns.w)}
+      ${nhlCell(ns.l)}
+      ${nhlCell(ns.ot)}
+      ${nhlCell(gaa)}
+      ${nhlCell(svp)}
+      ${nhlCell(ns.so)}
+      ${fsCell(g.sk, 55, 80)}
+      ${fsCell(g.ag, 55, 80)}
+      ${fsCell(g.en, 55, 80)}
+      ${fsCell(g.du, 55, 80)}
+      ${fsCell(g.sz, 55, 80)}
+      ${fsCell(g.rb, 55, 80)}
+      ${fsCell(g.sc, 55, 80)}
+      ${fsCell(g.hs, 55, 80)}
+      ${fsCell(g.rt, 55, 80)}
+      ${fsCell(g.ph, 55, 80)}
+      ${fsCell(g.ps, 55, 80)}
+      ${fsCell(g.ex, 55, 80)}
+      ${fsCell(g.ld, 55, 80)}
+      ${fsCell(g.po, 55, 80)}
+      ${fsCell(g.mo, 85, 92)}
+      <td class="sal">${g.sal||'—'}</td>
+      <td class="age">${g.age}</td>
+      <td style="color:var(--muted)">${g.c}yr</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="tbl-wrap"><table>
+    <thead>
+      <tr class="grp">
+        <th class="g-info" colspan="2"></th>
+        <th class="g-nhl"  colspan="7">NHL 2025-26</th>
+        <th class="g-fant" colspan="15">Fantasy</th>
+        <th class="g-admin" colspan="3"></th>
+      </tr>
+      <tr class="cols">
+        <th class="left">Goalie</th>
+        <th>OV</th>
+        <th class="nhl-col">GP</th>
+        <th class="nhl-col">W</th>
+        <th class="nhl-col">L</th>
+        <th class="nhl-col">OT</th>
+        <th class="nhl-col">GAA</th>
+        <th class="nhl-col">SV%</th>
+        <th class="nhl-col">SO</th>
+        <th class="fant-col">SK</th>
+        <th class="fant-col">AG</th>
+        <th class="fant-col">EN</th>
+        <th class="fant-col">DU</th>
+        <th class="fant-col">SZ</th>
+        <th class="fant-col">RB</th>
+        <th class="fant-col">SC</th>
+        <th class="fant-col">HS</th>
+        <th class="fant-col">RT</th>
+        <th class="fant-col">PH</th>
+        <th class="fant-col">PS</th>
+        <th class="fant-col">EX</th>
+        <th class="fant-col">LD</th>
+        <th class="fant-col">PO</th>
+        <th class="fant-col">MO</th>
+        <th>Salary</th>
+        <th>Age</th>
+        <th>Ctr</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+// ── Render roster ─────────────────────────────────────────────────────────
+function renderRoster(team, type) {
+  const t   = D[team];
+  const pro = type === 'pro';
+  const teamName   = pro ? team : t.fn;
+  const skaters    = pro ? t.ps  : t.fs;
+  const goalies    = pro ? t.pg  : t.fg;
+  const overall    = pro ? t.po  : t.fo;
+  const morale     = pro ? t.pm  : t.fm;
+  const tagLabel   = pro ? 'Pro Roster' : 'Farm Roster';
+  const tagClass   = pro ? 'pro' : 'farm';
+
+  document.getElementById('main').innerHTML = `
+    <div class="roster-hdr">
+      <h2>${teamName}</h2>
+      <span class="roster-tag ${tagClass}">${tagLabel}</span>
+      ${!pro ? `<span style="color:var(--muted);font-size:12px">affiliate of <strong style="color:var(--text)">${team}</strong></span>` : ''}
+    </div>
+
+    <div class="roster-meta">
+      <div class="meta-item">
+        <span class="meta-lbl">Overall</span>
+        <span class="meta-val big">${overall}</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-lbl">Morale</span>
+        <span class="meta-val">${morale}</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-lbl">General Manager</span>
+        <span class="meta-val">${t.gm}</span>
+      </div>
+      ${!pro ? `<div class="meta-item">
+        <span class="meta-lbl">Pro Affiliate</span>
+        <span class="meta-val">${team}</span>
+      </div>` : ''}
+      <div class="meta-item">
+        <span class="meta-lbl">Skaters</span>
+        <span class="meta-val">${skaters.length}</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-lbl">Goalies</span>
+        <span class="meta-val">${goalies.length}</span>
+      </div>
+    </div>
+
+    <div class="roster-sect">
+      <div class="sect-title">Skaters</div>
+      ${skaterTable(skaters)}
+    </div>
+
+    <div class="roster-sect">
+      <div class="sect-title">Goalies</div>
+      ${goalieTable(goalies)}
+    </div>`;
+}
+
+// ── Home screen ───────────────────────────────────────────────────────────
+function renderHome() {
+  const cards = TEAMS.map(t => {
+    const tm = D[t];
+    return `<div class="team-card" onclick="navigate('${t}','pro')">
+      <h3>${t}</h3>
+      <div class="card-gm">${tm.gm}</div>
+      <div class="card-foot">
+        <span class="card-ov">${tm.po}</span>
+        <span class="card-farm">${tm.fn}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('main').innerHTML = `
+    <div class="home">
+      <h2>RWHA Teams</h2>
+      <p class="home-sub">Select a team to view pro &amp; farm rosters with NHL 2025-26 stats</p>
+      <div class="team-grid">${cards}</div>
+    </div>`;
+}
+
+// ── Sidebar ────────────────────────────────────────────────────────────────
+function buildSidebar() {
+  document.getElementById('sidebar').innerHTML =
+    `<div class="nav-section">
+      <div class="nav-heading">Teams</div>
+      ${TEAMS.map(t => `
+        <div class="nav-team">
+          <div class="nav-team-name" onclick="toggleTeam('${t}')">
+            <span class="tnm">${t}</span>
+            <span class="tov">${D[t].po}</span>
+          </div>
+          <div class="nav-sub" id="sub-${t}">
+            <a class="nav-link" id="nl-${t}-pro"  onclick="navigate('${t}','pro')">
+              Pro — ${t}</a>
+            <a class="nav-link" id="nl-${t}-farm" onclick="navigate('${t}','farm')">
+              Farm — ${D[t].fn}</a>
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function toggleTeam(t) {
+  document.getElementById('sub-' + t).classList.toggle('open');
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────────
+function navigate(team, type) {
+  document.querySelectorAll('.nav-link.active').forEach(el => el.classList.remove('active'));
+  const link = document.getElementById(`nl-${team}-${type}`);
+  if (link) { link.classList.add('active'); }
+  document.getElementById(`sub-${team}`)?.classList.add('open');
+  renderRoster(team, type);
+  window.location.hash = `${team}/${type}`;
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+function init() {
+  buildSidebar();
+
+  // NHL stats status badge
+  const matched = Object.values(NS).filter(v => Object.keys(v).length > 0).length;
+  const total   = Object.keys(NS).length;
+  document.getElementById('hdr-nhl-status').textContent =
+    `NHL: ${matched}/${total} players`;
+
+  const hash = window.location.hash.slice(1);
+  if (hash) {
+    const [team, type] = hash.split('/');
+    if (D[team] && (type === 'pro' || type === 'farm')) {
+      navigate(team, type);
+      return;
+    }
+  }
+  renderHome();
+}
+
+window.addEventListener('hashchange', () => {
+  const [team, type] = window.location.hash.slice(1).split('/');
+  if (D[team] && (type === 'pro' || type === 'farm')) navigate(team, type);
+});
+
+init();
+</script>
+</body>
+</html>
