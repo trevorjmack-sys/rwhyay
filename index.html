@@ -310,6 +310,13 @@ tbody td.fant-col { background: var(--fant-zone); }
 .team-card .card-foot { display: flex; justify-content: space-between; margin-top: 8px; align-items: baseline; }
 .team-card .card-ov { font-size: 18px; font-weight: 800; color: var(--amber-hi); }
 .team-card .card-farm { font-size: 10px; color: var(--muted); }
+.card-standings { margin-top: 9px; border-top: 1px solid var(--border); padding-top: 7px; display: flex; flex-direction: column; gap: 4px; }
+.card-std-row { display: flex; align-items: center; gap: 5px; font-size: 10px; line-height: 1.3; }
+.card-std-badge { padding: 1px 5px; border-radius: 2px; font-weight: 700; font-size: 10px; letter-spacing: 0.3px; white-space: nowrap; }
+.card-std-badge.cur  { background: #2a2218; color: var(--amber); border: 1px solid var(--amber-lo); }
+.card-std-badge.proj { background: #161f1a; color: #5ecf80; border: 1px solid #254030; }
+.card-std-pts { color: var(--ice); font-weight: 600; }
+.card-std-meta { color: var(--muted); }
 
 /* ── Search results ──────────────────────────────────────────────────────── */
 .search-count { color: var(--muted); font-size: 12px; letter-spacing: 0.5px; margin-bottom: 16px; }
@@ -346,6 +353,37 @@ tbody td.fant-col { background: var(--fant-zone); }
 const D  = window.RWHA_DATA;
 const NS = window.NHL_STATS || {};
 const TEAMS = Object.keys(D).sort();
+
+// ── League standings (scraped 2026-03-01, ~50 GP played, 82 GP season) ──────
+// cur = current conf rank, pts = current points, pct = points pct,
+// rem = games remaining, proj = projected final pts, projPos = projected rank
+const STANDINGS = {
+  // Wales Conference
+  'Gladiators': { conf:'W', cur:1,  pts:73, gp:51, pct:0.716, rem:31, proj:117, projPos:1  },
+  'Warheads':   { conf:'W', cur:2,  pts:61, gp:49, pct:0.622, rem:33, proj:102, projPos:2  },
+  'Bunnies':    { conf:'W', cur:3,  pts:61, gp:50, pct:0.610, rem:32, proj:100, projPos:3  },
+  'Fletushkas': { conf:'W', cur:4,  pts:60, gp:50, pct:0.600, rem:32, proj:98,  projPos:4  },
+  'Clan':       { conf:'W', cur:5,  pts:54, gp:50, pct:0.540, rem:32, proj:89,  projPos:5  },
+  'Flyers':     { conf:'W', cur:6,  pts:54, gp:51, pct:0.529, rem:31, proj:87,  projPos:6  },
+  'Jets':       { conf:'W', cur:7,  pts:51, gp:51, pct:0.500, rem:31, proj:82,  projPos:7  },
+  'Giants':     { conf:'W', cur:8,  pts:50, gp:50, pct:0.500, rem:32, proj:82,  projPos:8  },
+  'Mongoloids': { conf:'W', cur:9,  pts:46, gp:50, pct:0.460, rem:32, proj:75,  projPos:9  },
+  'Riots':      { conf:'W', cur:10, pts:44, gp:50, pct:0.440, rem:32, proj:72,  projPos:10 },
+  'Aces':       { conf:'W', cur:11, pts:40, gp:51, pct:0.392, rem:31, proj:64,  projPos:11 },
+  // Campbell Conference
+  'Oilers':     { conf:'C', cur:1,  pts:78, gp:50, pct:0.780, rem:32, proj:128, projPos:1  },
+  'Shitbirds':  { conf:'C', cur:2,  pts:70, gp:51, pct:0.686, rem:31, proj:113, projPos:2  },
+  'Phantoms':   { conf:'C', cur:3,  pts:62, gp:50, pct:0.620, rem:32, proj:102, projPos:3  },
+  'Meltdown':   { conf:'C', cur:4,  pts:61, gp:49, pct:0.622, rem:33, proj:102, projPos:4  },
+  'Steamers':   { conf:'C', cur:5,  pts:57, gp:51, pct:0.559, rem:31, proj:92,  projPos:5  },
+  'Mariners':   { conf:'C', cur:6,  pts:54, gp:49, pct:0.551, rem:33, proj:90,  projPos:6  },
+  'Snowdogs':   { conf:'C', cur:7,  pts:53, gp:50, pct:0.530, rem:32, proj:87,  projPos:7  },
+  'Marauders':  { conf:'C', cur:8,  pts:53, gp:51, pct:0.520, rem:31, proj:85,  projPos:8  },
+  'WaffleBots': { conf:'C', cur:9,  pts:50, gp:51, pct:0.490, rem:31, proj:80,  projPos:9  },
+  'Cunts':      { conf:'C', cur:10, pts:49, gp:51, pct:0.480, rem:31, proj:79,  projPos:10 },
+  'Chiefs':     { conf:'C', cur:11, pts:27, gp:50, pct:0.270, rem:32, proj:44,  projPos:11 },
+};
+function ordinal(n) { return n+(n===1?'st':n===2?'nd':n===3?'rd':'th'); }
 
 // ── Sort state ─────────────────────────────────────────────────────────────
 const _state = {
@@ -873,13 +911,34 @@ function renderSearch(query) {
 function renderHome() {
   const cards = TEAMS.map(t => {
     const tm = D[t];
+    const st = STANDINGS[t];
+    let stdHtml = '';
+    if (st) {
+      const confFull = st.conf === 'W' ? 'Wales' : 'Campbell';
+      const curLabel = `${confFull} · ${ordinal(st.cur)}`;
+      const projLabel = `${confFull} · ${ordinal(st.projPos)}`;
+      const pctPct = (st.pct * 100).toFixed(1);
+      stdHtml = `
+      <div class="card-standings">
+        <div class="card-std-row">
+          <span class="card-std-badge cur">NOW</span>
+          <span class="card-std-pts">${st.pts} pts</span>
+          <span class="card-std-meta">${curLabel}</span>
+        </div>
+        <div class="card-std-row">
+          <span class="card-std-badge proj">PROJ</span>
+          <span class="card-std-pts">~${st.proj} pts</span>
+          <span class="card-std-meta">${projLabel}</span>
+        </div>
+      </div>`;
+    }
     return `<div class="team-card" onclick="navigate('${t}','pro')">
       <h3>${t}</h3>
       <div class="card-gm">${tm.gm}</div>
       <div class="card-foot">
         <span class="card-ov">${tm.po}</span>
         <span class="card-farm">${tm.fn}</span>
-      </div>
+      </div>${stdHtml}
     </div>`;
   }).join('');
 
