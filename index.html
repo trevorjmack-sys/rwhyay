@@ -327,6 +327,9 @@ tbody td.fant-col { background: var(--fant-zone); }
 .card-std-badge.proj { background: #161f1a; color: #5ecf80; border: 1px solid #254030; }
 .card-std-pts { color: var(--ice); font-weight: 600; }
 .card-std-meta { color: var(--muted); }
+.card-rivalry { margin-top: 5px; padding: 4px 8px; border-radius: 3px; font-size: 9.5px; line-height: 1.45; font-style: italic; }
+.card-rivalry.under { background: rgba(220,70,30,.13); border-left: 3px solid #d06040; color: #e89878; }
+.card-rivalry.over  { background: rgba(50,190,90,.10); border-left: 3px solid #44b868; color: #66d888; }
 
 /* ── Season selector ─────────────────────────────────────────────────────── */
 .season-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -413,6 +416,27 @@ const STANDINGS = {
   'Chiefs':     { conf:'C', cur:11, pts:27, gp:50, pct:0.270, rem:31, proj:52,  projPos:11 },
 };
 function ordinal(n) { return n+(n===1?'st':n===2?'nd':n===3?'rd':'th'); }
+
+// ── OV-vs-standings rivalry badge ──────────────────────────────────────────
+// Compares a team's roster OV rank within their conference against their
+// actual current standing, generating punchy snark for big discrepancies.
+function rivalrySnark(t, st) {
+  if (!st || !D[t]) return '';
+  const ov      = parseInt(D[t].po);
+  const confTeams = TEAMS.filter(x => STANDINGS[x] && STANDINGS[x].conf === st.conf);
+  // Standard ranking: ovRank = 1 + count of conf teams with strictly higher OV
+  const ovRank  = 1 + confTeams.filter(x => parseInt(D[x].po) > ov).length;
+  const curRank = st.cur;
+  const delta   = curRank - ovRank;   // positive = underperforming vs OV
+  const conf    = st.conf === 'W' ? 'Wales' : 'Campbell';
+  const ovOrd   = ordinal(ovRank);
+  const curOrd  = ordinal(curRank);
+  if      (delta >=  5) return `<div class="card-rivalry under">OV-${ov} roster rates ${ovOrd} in the ${conf} — somehow sitting ${curOrd} 💀</div>`;
+  else if (delta >=  2) return `<div class="card-rivalry under">OV-${ov} roster should be ${ovOrd} in the ${conf} — sitting ${curOrd} 📉</div>`;
+  else if (delta <= -5) return `<div class="card-rivalry over">OV-${ov} roster is only ${ovOrd}-rated in the ${conf} — somehow ${curOrd}?! 🔥</div>`;
+  else if (delta <= -2) return `<div class="card-rivalry over">OV-${ov} roster only ${ovOrd} in the ${conf} — punching up at ${curOrd} 💪</div>`;
+  return '';
+}
 
 // ── Sort state ─────────────────────────────────────────────────────────────
 const _state = {
@@ -1028,6 +1052,7 @@ function renderHome() {
           <span class="card-std-pts">~${st.proj} pts</span>
           <span class="card-std-meta">${projLabel}</span>
         </div>
+        ${rivalrySnark(t, st)}
       </div>`;
     }
     return `<div class="team-card" onclick="navigate('${t}','pro')">
