@@ -1,0 +1,40 @@
+name: Update RWHA Standings
+
+# Runs every Sunday at 15:00 Pacific.
+# 22:00 UTC = 3:00 PM PDT (UTC-7, Mar–Nov) / 2:00 PM PST (UTC-8, Nov–Mar).
+# Also triggerable manually from the Actions tab.
+on:
+  schedule:
+    - cron: '0 22 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-standings:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Scrape RWHA schedule and update STANDINGS in index.html
+        run: python .github/scripts/update_standings.py
+
+      - name: Commit and push if standings changed
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          if git diff --quiet index.html; then
+            echo "index.html unchanged — nothing to commit."
+          else
+            git add index.html
+            git commit -m "Auto-update RWHA standings [${STANDINGS_DATE}]"
+            git push
+          fi
