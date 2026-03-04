@@ -4,7 +4,7 @@ name: Update NHL Stats
 # Also triggerable manually from the Actions tab.
 on:
   schedule:
-    - cron: '0 10 */3 * *'
+    - cron: '0 10 * * *'
   workflow_dispatch:
 
 permissions:
