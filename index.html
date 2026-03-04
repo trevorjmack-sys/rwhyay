@@ -70,14 +70,19 @@ header {
   height: 40px; width: auto;
   flex-shrink: 0;
   filter: drop-shadow(0 0 6px rgba(208,124,10,0.4));
+  cursor: pointer;
+  transition: filter 0.15s;
 }
+.hnic-logo:hover { filter: drop-shadow(0 0 10px rgba(208,124,10,0.7)); }
 .hdr-stripe {
   width: 5px; height: 34px; border-radius: 2px;
   background: var(--amber);
 }
 .hdr-title {
   display: flex; flex-direction: column; gap: 1px;
+  cursor: pointer;
 }
+.hdr-title:hover h1 { color: var(--amber-hi); }
 .hdr-title h1 {
   font-size: 20px; font-weight: 800; letter-spacing: 2px;
   color: var(--ice); text-transform: uppercase;
@@ -339,9 +344,9 @@ tbody td.fant-col { background: var(--fant-zone); }
 
 <header>
   <img src="hnic-logo.svg"
-       class="hnic-logo" alt="Hockey Night in Canada">
+       class="hnic-logo" alt="Hockey Night in Canada" onclick="goHome()">
   <div class="hdr-stripe"></div>
-  <div class="hdr-title">
+  <div class="hdr-title" onclick="goHome()">
     <h1>RWHA</h1>
     <span class="hdr-sub">Soirée des Statistiques</span>
   </div>
@@ -1061,6 +1066,15 @@ function navigate(team, type) {
   document.getElementById(`sub-${team}`)?.classList.add('open');
   renderRoster(team, type);
   window.location.hash = `${team}/${type}`;
+}
+
+// ── Go home ────────────────────────────────────────────────────────────────
+function goHome() {
+  document.getElementById('player-search').value = '';
+  document.querySelectorAll('.nav-link.active').forEach(el => el.classList.remove('active'));
+  _currentTeam = null; _currentType = null;
+  history.replaceState(null, '', window.location.pathname);
+  renderHome();
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
