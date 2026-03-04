@@ -9,6 +9,7 @@ Uses only Python stdlib — no pip installs required.
 """
 
 import json
+import os
 import re
 import sys
 import time
@@ -234,7 +235,13 @@ def main() -> None:
     size_kb = STATS_FILE.stat().st_size / 1024
     print(f'\n✓ nhl_stats.js written  ({size_kb:.1f} KB,  {matched} players with stats)')
 
-    # Exit non-zero only on truly unexpected failures; unmatched players are normal
+    # Export counts to GitHub Actions environment so the commit step can read them
+    github_env = os.environ.get('GITHUB_ENV')
+    if github_env:
+        with open(github_env, 'a') as f:
+            f.write(f'NHL_MATCHED={matched}\n')
+            f.write(f'NHL_TOTAL={len(stats)}\n')
+
     sys.exit(0)
 
 
