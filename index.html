@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RWHA — Soirée des statistiques</title>
+<!-- Security: CSP locks down resource origins; noindex keeps it off search engines -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'self';">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
 <style>
 /* ── Reset ────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -517,6 +522,16 @@ function ovPill(v) {
   return `<span class="ov ${ovClass(v)}">${v}</span>`;
 }
 
+// Escape HTML special characters to prevent XSS when rendering user input
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function cleanNHLKey(nm) {
   return nm.replace(/\s*\([RCA]\)/g, '').trim();
 }
@@ -940,7 +955,7 @@ function renderSearch(query) {
     document.getElementById('main').innerHTML = `
       <div class="home">
         <h2>Search</h2>
-        <p style="color:var(--muted);margin-top:8px">No players found matching "<strong style="color:var(--text)">${query}</strong>"</p>
+        <p style="color:var(--muted);margin-top:8px">No players found matching "<strong style="color:var(--text)">${escHtml(query)}</strong>"</p>
       </div>`;
     return;
   }
@@ -966,7 +981,7 @@ function renderSearch(query) {
   document.getElementById('main').innerHTML = `
     <div class="home">
       <h2>Search</h2>
-      <p class="search-count">${results.length} player${results.length !== 1 ? 's' : ''} matching "<strong style="color:var(--text)">${query}</strong>"</p>
+      <p class="search-count">${results.length} player${results.length !== 1 ? 's' : ''} matching "<strong style="color:var(--text)">${escHtml(query)}</strong>"</p>
       <div class="tbl-wrap"><table>
         <thead>
           <tr class="grp">
