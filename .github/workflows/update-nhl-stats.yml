@@ -1,0 +1,54 @@
+name: Update NHL Stats
+
+# Runs every 3 days at 02:00 AM Pacific (10:00 UTC)
+# Also triggerable manually from the Actions tab.
+on:
+  schedule:
+    - cron: '0 10 */3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # allows the bot to commit & push nhl_stats.js
+
+jobs:
+  update-stats:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Fetch current-season NHL stats → nhl_stats.js
+        run: python .github/scripts/update_nhl_stats.py
+
+      - name: Commit and push if stats changed
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+
+          if git diff --quiet nhl_stats.js; then
+            echo "nhl_stats.js unchanged — nothing to commit."
+          else
+            MATCHED=$(python3 - <<'PYEOF'
+import json
+raw  = open('nhl_stats.js').read().strip()
+data = json.loads(raw.split('=',1)[1].strip().rstrip(';'))
+print(sum(1 for v in data.values() if v))
+PYEOF
+)
+            TOTAL=$(python3 - <<'PYEOF'
+import json
+raw  = open('nhl_stats.js').read().strip()
+data = json.loads(raw.split('=',1)[1].strip().rstrip(';'))
+print(len(data))
+PYEOF
+)
+            git add nhl_stats.js
+            git commit -m "Auto-update NHL stats [$(date -u '+%Y-%m-%d')] — ${MATCHED}/${TOTAL} players"
+            git push
+          fi
