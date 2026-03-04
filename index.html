@@ -318,6 +318,17 @@ tbody td.fant-col { background: var(--fant-zone); }
 .card-std-pts { color: var(--ice); font-weight: 600; }
 .card-std-meta { color: var(--muted); }
 
+/* ── Season selector ─────────────────────────────────────────────────────── */
+.season-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.season-bar label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+.season-sel {
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text); font-size: 12px; font-family: inherit;
+  padding: 4px 10px; border-radius: 3px; cursor: pointer;
+  outline: none;
+}
+.season-sel:focus { border-color: var(--amber-lo); }
+
 /* ── Search results ──────────────────────────────────────────────────────── */
 .search-count { color: var(--muted); font-size: 12px; letter-spacing: 0.5px; margin-bottom: 16px; }
 .search-hit-row { cursor: pointer; }
@@ -348,11 +359,18 @@ tbody td.fant-col { background: var(--fant-zone); }
 
 <script src="data.js"></script>
 <script src="nhl_stats.js"></script>
+<script src="nhl_stats_2425.js"></script>
 <script>
 'use strict';
-const D  = window.RWHA_DATA;
-const NS = window.NHL_STATS || {};
+const D    = window.RWHA_DATA;
+const NS   = window.NHL_STATS      || {};   // 2025-26
+const NS24 = window.NHL_STATS_2425 || {};   // 2024-25
 const TEAMS = Object.keys(D).sort();
+
+// ── Season selector state ────────────────────────────────────────────────────
+// '2526' = current, '2425' = previous, 'comb' = combined 2024-2026
+let _season = '2526';
+let _currentTeam = null, _currentType = null;
 
 // ── League standings (scraped 2026-03-01, ~50 GP played, 82 GP season) ──────
 // cur = current conf rank, pts = current points, pct = points pct,
@@ -498,8 +516,51 @@ function cleanNHLKey(nm) {
   return nm.replace(/\s*\([RCA]\)/g, '').trim();
 }
 
+function nhlCombine(a, b) {
+  // Combine two season stat objects. Returns {} if both empty.
+  if (!a || !Object.keys(a).length) return b || {};
+  if (!b || !Object.keys(b).length) return a || {};
+  // Skater combined
+  if ('pts' in a || 'pts' in b) {
+    const n = s => parseInt(s)||0;
+    return {
+      gp:  String(n(a.gp)  + n(b.gp)),
+      g:   String(n(a.g)   + n(b.g)),
+      a:   String(n(a.a)   + n(b.a)),
+      pts: String(n(a.pts) + n(b.pts)),
+      pm:  String(n(a.pm)  + n(b.pm)),
+      pim: String(n(a.pim) + n(b.pim)),
+      sog: String(n(a.sog) + n(b.sog)),
+    };
+  }
+  // Goalie combined (weighted averages for GAA and SV%)
+  const n = s => parseInt(s)||0;
+  const f = s => parseFloat(s)||0;
+  const gpA = n(a.gp), gpB = n(b.gp), gpT = gpA + gpB;
+  const gaa = gpT ? ((f(a.gaa)*gpA + f(b.gaa)*gpB)/gpT) : 0;
+  const svp = gpT ? ((f(a.svp)*gpA + f(b.svp)*gpB)/gpT) : 0;
+  return {
+    gp:  String(gpT),
+    w:   String(n(a.w)  + n(b.w)),
+    l:   String(n(a.l)  + n(b.l)),
+    ot:  String(n(a.ot) + n(b.ot)),
+    gaa: gaa.toFixed(2),
+    svp: svp.toFixed(3).replace(/^0/,''),
+    so:  String(n(a.so) + n(b.so)),
+  };
+}
+
 function nhlLookup(nm) {
-  return NS[cleanNHLKey(nm)] || {};
+  const k = cleanNHLKey(nm);
+  if (_season === '2526') return NS[k]   || {};
+  if (_season === '2425') return NS24[k] || {};
+  return nhlCombine(NS24[k], NS[k]);       // combined
+}
+
+function nhlSeasonLabel() {
+  if (_season === '2526') return 'NHL 2025-26';
+  if (_season === '2425') return 'NHL 2024-25';
+  return 'NHL 2024-2026';
 }
 
 function nameTags(nm, sp) {
@@ -698,7 +759,7 @@ function skaterTable(players) {
     <thead>
       <tr class="grp">
         <th class="g-info" colspan="4"></th>
-        <th class="g-nhl"  colspan="7">NHL 2025-26</th>
+        <th class="g-nhl"  colspan="7" id="skater-nhl-hdr">${nhlSeasonLabel()}</th>
         <th class="g-fant" colspan="17">Fantasy</th>
         <th class="g-admin" colspan="3"></th>
       </tr>
@@ -750,7 +811,7 @@ function goalieTable(goalies) {
     <thead>
       <tr class="grp">
         <th class="g-info" colspan="2"></th>
-        <th class="g-nhl"  colspan="7">NHL 2025-26</th>
+        <th class="g-nhl"  colspan="7" id="goalie-nhl-hdr">${nhlSeasonLabel()}</th>
         <th class="g-fant" colspan="15">Fantasy</th>
         <th class="g-admin" colspan="3"></th>
       </tr>
@@ -790,6 +851,7 @@ function goalieTable(goalies) {
 
 // ── Render roster ─────────────────────────────────────────────────────────
 function renderRoster(team, type) {
+  _currentTeam = team; _currentType = type;
   const t   = D[team];
   const pro = type === 'pro';
   const teamName   = pro ? team : t.fn;
@@ -834,6 +896,15 @@ function renderRoster(team, type) {
       </div>
     </div>
 
+    <div class="season-bar">
+      <label for="season-sel">NHL Stats Season</label>
+      <select class="season-sel" id="season-sel" onchange="changeSeason(this.value)">
+        <option value="2526"${_season === '2526' ? ' selected' : ''}>Current Season (2025-26)</option>
+        <option value="2425"${_season === '2425' ? ' selected' : ''}>Previous Season (2024-25)</option>
+        <option value="comb"${_season === 'comb' ? ' selected' : ''}>Combined Seasons (2024-2026)</option>
+      </select>
+    </div>
+
     <div class="roster-sect">
       <div class="sect-title">Skaters</div>
       ${skaterTable(skaters)}
@@ -845,6 +916,12 @@ function renderRoster(team, type) {
     </div>`;
 
   attachSortHandlers();
+}
+
+// ── Season change handler ──────────────────────────────────────────────────
+function changeSeason(val) {
+  _season = val;
+  if (_currentTeam) renderRoster(_currentTeam, _currentType);
 }
 
 // ── Global search ──────────────────────────────────────────────────────────
