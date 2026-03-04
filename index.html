@@ -433,7 +433,7 @@ function rivalrySnark(t, st) {
   const ovOrd   = ordinal(ovRank);
   const curOrd  = ordinal(curRank);
   if      (delta >=  5) return `<div class="card-rivalry under">OV-${ov} roster rates ${ovOrd} in the ${conf} — somehow sitting ${curOrd} 💀</div>`;
-  else if (delta >=  2) return `<div class="card-rivalry under">OV-${ov} roster should be ${ovOrd} in the ${conf} — sitting ${curOrd} <b style="color:#ff3030">↓</b></div>`;
+  else if (delta >=  2) return `<div class="card-rivalry under">OV-${ov} roster should be ${ovOrd} in the ${conf} — sitting ${curOrd} 📉</div>`;
   else if (delta <= -5) return `<div class="card-rivalry over">OV-${ov} roster is only ${ovOrd}-rated in the ${conf} — somehow ${curOrd}?! 🔥</div>`;
   else if (delta <= -2) return `<div class="card-rivalry over">OV-${ov} roster only ${ovOrd} in the ${conf} — punching up at ${curOrd} 💪</div>`;
   return `<div class="card-rivalry vanilla">OV-${ov} roster rates ${ovOrd} in the ${conf} — performing as expected 🍦</div>`;
