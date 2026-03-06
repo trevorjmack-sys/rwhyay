@@ -125,6 +125,30 @@ nav {
 nav::-webkit-scrollbar { width: 4px; }
 nav::-webkit-scrollbar-thumb { background: var(--border2); }
 
+/* ── Mobile nav toggle ──────────────────────────────────────────────────── */
+.nav-toggle {
+  display: none;
+  background: none; border: none; cursor: pointer;
+  color: var(--ice); font-size: 22px; line-height: 1;
+  padding: 4px 6px; flex-shrink: 0;
+  transition: color 0.15s;
+}
+.nav-toggle:hover { color: var(--amber); }
+.nav-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55); z-index: 19;
+}
+@media (max-width: 640px) {
+  .nav-toggle { display: block; }
+  nav {
+    position: fixed; top: var(--hdr-h); left: 0; bottom: 0;
+    z-index: 20; transform: translateX(-100%);
+    transition: transform 0.22s ease;
+  }
+  nav.nav-open { transform: translateX(0); }
+  .nav-overlay.nav-open { display: block; }
+}
+
 .nav-section { padding: 10px 0 4px; }
 .nav-heading {
   font-size: 9px; font-weight: 700; text-transform: uppercase;
@@ -352,6 +376,7 @@ tbody td.fant-col { background: var(--fant-zone); }
 <body>
 
 <header>
+  <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation">☰</button>
   <img src="hnic-logo.svg"
        class="hnic-logo" alt="Hockey Night in Canada" onclick="goHome()">
   <div class="hdr-stripe"></div>
@@ -367,6 +392,7 @@ tbody td.fant-col { background: var(--fant-zone); }
 </header>
 
 <div class="layout">
+  <div class="nav-overlay" id="nav-overlay"></div>
   <nav id="sidebar"></nav>
   <main id="main"></main>
 </div>
@@ -1099,8 +1125,15 @@ function toggleTeam(t) {
   document.getElementById('sub-' + t).classList.toggle('open');
 }
 
+// ── Mobile nav ──────────────────────────────────────────────────────────────
+function closeMobileNav() {
+  document.getElementById('sidebar').classList.remove('nav-open');
+  document.getElementById('nav-overlay').classList.remove('nav-open');
+}
+
 // ── Navigation ─────────────────────────────────────────────────────────────
 function navigate(team, type) {
+  closeMobileNav();
   document.getElementById('player-search').value = '';
   document.querySelectorAll('.nav-link.active').forEach(el => el.classList.remove('active'));
   const link = document.getElementById(`nl-${team}-${type}`);
@@ -1112,6 +1145,7 @@ function navigate(team, type) {
 
 // ── Go home ────────────────────────────────────────────────────────────────
 function goHome() {
+  closeMobileNav();
   document.getElementById('player-search').value = '';
   document.querySelectorAll('.nav-link.active').forEach(el => el.classList.remove('active'));
   _currentTeam = null; _currentType = null;
@@ -1123,6 +1157,13 @@ function goHome() {
 function init() {
   buildSidebar();
   buildPlayerIndex();
+
+  // Mobile nav toggle
+  document.getElementById('nav-toggle').addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('nav-open');
+    document.getElementById('nav-overlay').classList.toggle('nav-open');
+  });
+  document.getElementById('nav-overlay').addEventListener('click', closeMobileNav);
 
   // NHL stats status badge
   const matched = Object.values(NS).filter(v => Object.keys(v).length > 0).length;
