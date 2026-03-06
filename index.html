@@ -631,7 +631,11 @@ function nhlLookup(nm) {
   const k = cleanNHLKey(nm);
   if (_season === '2526') return NS[k]   || {};
   if (_season === '2425') return NS24[k] || {};
-  return nhlCombine(NS24[k], NS[k]);       // combined
+  const cur = NS[k] || {};
+  const combined = nhlCombine(NS24[k], cur);  // combined
+  if (cur.url) combined.url = cur.url;         // carry through link / pos metadata
+  if (cur.pos) combined.pos = cur.pos;
+  return combined;
 }
 
 function nhlSeasonLabel() {
