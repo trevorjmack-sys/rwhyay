@@ -23,8 +23,24 @@ from bs4 import BeautifulSoup
 URL       = 'http://www.rwha.net/RWHA-ProTeamRoster.php'
 DATA_FILE = Path('data.js')
 
-# Fictional fantasy characters inserted into rosters — excluded from data.js
-FICTIONAL = {
+# Real hockey player link domains — any player whose last-column link matches
+# one of these is treated as a real player.  Fictional characters link to
+# youtube, wikipedia, urbandictionary, imdb, etc. and will be excluded
+# automatically even if their names change.
+#
+# The name list below is a fallback for edge cases where a fictional player
+# happens to share a domain with real players (e.g. hockeydb.com).
+REAL_DOMAINS = (
+    'capfriendly.com/players/',
+    'nhl.com/player/',
+    'theahl.com/stats/player/',
+    'eliteprospects.com/player/',
+    'hockeydb.com/ihdb/',
+)
+
+# Fictional players who use a domain that also appears for real players.
+# Update this list if new edge-case fictional players are added to the league.
+FICTIONAL_NAMES = {
     'Lee Mack', 'Nipples Tenderloin', 'Danny Massawhip', 'Chu Kock',
     'Rick Spreadum', 'Manly Rymjob', 'Shitty-Kitty Gangbang',
     'El Burrito Peligroso', 'Cockring Bomber', 'Wrinkles Cumbersnatch',
@@ -44,12 +60,32 @@ def fetch():
         return r.read().decode('utf-8', errors='replace')
 
 # ── Helpers ─────────────────────────────────────────────────────────────────────
-def base_name(nm):
-    """Strip STHS suffixes like (R), (C), (A) to get the plain player name."""
-    return re.sub(r'\s*\([RCA]\)', '', nm).strip()
+def is_real_player(tr):
+    """Return True if this row represents a real hockey player.
 
-def is_fictional(nm):
-    return base_name(nm) in FICTIONAL
+    Detection uses two signals:
+    1. Name-based: if the player's name is in FICTIONAL_NAMES → excluded.
+    2. Link-based: the last <td> must contain a link to a known hockey site.
+       Fictional characters link to youtube, wikipedia, urbandictionary, etc.
+       and are excluded automatically even if their names change.
+    """
+    tds = tr.find_all('td')
+    if not tds:
+        return False
+    a = tds[-1].find('a')
+    href = a.get('href', '') if a else ''
+    # Name check (handles shared-domain edge cases like hockeydb)
+    # Skater name is tds[1]; goalie name is tds[0] — check both
+    for idx in (0, 1):
+        if idx < len(tds):
+            nm = re.sub(r'\s*\([RCA]\)', '', tds[idx].get_text(strip=True)).strip()
+            if nm in FICTIONAL_NAMES:
+                return False
+    # Link check: known hockey site → include; empty link → include (assume
+    # real player with no profile set up); any other domain → exclude
+    if not href:
+        return True
+    return any(d in href for d in REAL_DOMAINS)
 
 def clean_con(val):
     """'100.00' → '100'  (conditioning is stored as an integer string)"""
@@ -75,7 +111,7 @@ def parse_skater(vals):
     if len(vals) < 30:
         return None
     nm = vals[1]
-    if not nm or is_fictional(nm):
+    if not nm:
         return None
     return {
         'n':   vals[0],
@@ -115,7 +151,7 @@ def parse_goalie(vals):
     if len(vals) < 24:
         return None
     nm = vals[0]
-    if not nm or is_fictional(nm):
+    if not nm:
         return None
     return {
         'nm':  nm,
@@ -167,23 +203,21 @@ def parse_roster_div(div):
     ov_m  = re.search(r'Team Overall\s*:\s*(\d+)', info_text)
     overall = ov_m.group(1) if ov_m else ''
 
-    # Skater table (skip header rows — no td[0] == '#' since headers use <th>)
+    # Skater table — skip header rows and fictional players (no capfriendly link)
     skaters = []
     for tr in tables[1].find_all('tr'):
-        tds = get_cells(tr)
-        if not tds:
+        if not is_real_player(tr):
             continue
-        p = parse_skater(tds)
+        p = parse_skater(get_cells(tr))
         if p:
             skaters.append(p)
 
     # Goalie table
     goalies = []
     for tr in tables[2].find_all('tr'):
-        tds = get_cells(tr)
-        if not tds:
+        if not is_real_player(tr):
             continue
-        p = parse_goalie(tds)
+        p = parse_goalie(get_cells(tr))
         if p:
             goalies.append(p)
 
