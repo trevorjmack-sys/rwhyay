@@ -138,12 +138,19 @@ def fetch_bulk(kind: str) -> list:
 
 
 # ── Build name → stats lookups ────────────────────────────────────────────────
+def nhl_url(player_id: int, full_name: str) -> str:
+    """Build an NHL.com player profile URL from ID and full name."""
+    slug = re.sub(r'\s+', '-', normalize(full_name))   # accent-stripped, hyphenated
+    return f'https://www.nhl.com/player/{slug}-{player_id}'
+
+
 def build_skater_lookup(rows: list) -> dict:
     lookup: dict = {}
     for r in rows:
         name = normalize(r.get('skaterFullName', ''))
         if not name:
             continue
+        player_id = r.get('playerId')
         lookup[name] = {
             'gp':  str(r.get('gamesPlayed',    '') or ''),
             'g':   str(r.get('goals',          '') or ''),
@@ -152,6 +159,9 @@ def build_skater_lookup(rows: list) -> dict:
             'pm':  str(r.get('plusMinus',      '') or ''),
             'pim': str(r.get('penaltyMinutes', '') or ''),
             'sog': str(r.get('shots',          '') or ''),
+            'id':  player_id,
+            'pos': r.get('positionCode', ''),
+            'url': nhl_url(player_id, r.get('skaterFullName', '')) if player_id else '',
         }
     return lookup
 
@@ -162,6 +172,7 @@ def build_goalie_lookup(rows: list) -> dict:
         name = normalize(r.get('goalieFullName', ''))
         if not name:
             continue
+        player_id = r.get('playerId')
         gaa = float(r.get('goalsAgainstAverage', 0) or 0)
         svp = float(r.get('savePct',              0) or 0)
         lookup[name] = {
@@ -172,6 +183,9 @@ def build_goalie_lookup(rows: list) -> dict:
             'gaa': f'{gaa:.2f}',
             'svp': f'{svp:.3f}'.lstrip('0') or '.000',
             'so':  str(r.get('shutouts',    '') or ''),
+            'id':  player_id,
+            'pos': 'G',
+            'url': nhl_url(player_id, r.get('goalieFullName', '')) if player_id else '',
         }
     return lookup
 

@@ -291,6 +291,8 @@ tbody td.fant-col { background: var(--fant-zone); }
 
 /* Player name cell */
 .pnm { color: var(--ice); font-weight: 600; }
+.player-link { text-decoration: none; }
+.player-link:hover { color: var(--amber); text-decoration: underline; }
 .tag { font-size: 9px; font-weight: 800; margin-left: 3px; vertical-align: middle; }
 .tag.r { color: #50d080; }
 .tag.c { color: var(--amber); }
@@ -546,15 +548,18 @@ function buildPlayerIndex() {
   _playerIndex = [];
   TEAMS.forEach(team => {
     const t = D[team];
-    const push = (arr, type, isGoalie) => (arr || []).forEach(p => _playerIndex.push({
-      cleanNm: cleanNHLKey(p.nm).toLowerCase(),
-      nm: p.nm, sp: p.sp, ij: p.ij,
-      team, type,
-      pos: isGoalie ? 'G' : (p.p || ''),
-      ov: p.ov,
-      _ns: nhlLookup(p.nm),
-      isGoalie,
-    }));
+    const push = (arr, type, isGoalie) => (arr || []).forEach(p => {
+      const _ns = nhlLookup(p.nm);
+      _playerIndex.push({
+        cleanNm: cleanNHLKey(p.nm).toLowerCase(),
+        nm: p.nm, sp: p.sp, ij: p.ij,
+        team, type,
+        pos: isGoalie ? 'G' : (_ns.pos || p.p || ''),
+        ov: p.ov,
+        _ns,
+        isGoalie,
+      });
+    });
     push(t.ps, 'pro',  false);
     push(t.pg, 'pro',  true);
     push(t.fs, 'farm', false);
@@ -635,14 +640,17 @@ function nhlSeasonLabel() {
   return 'NHL 2024-2026';
 }
 
-function nameTags(nm, sp) {
+function nameTags(nm, sp, ns) {
   let n = nm, tags = '';
   if (n.includes('(R)')) { n = n.replace('(R)',''); tags += '<span class="tag r">R</span>'; }
   if (n.includes('(C)')) { n = n.replace('(C)',''); tags += '<span class="tag c">C</span>'; }
   if (n.includes('(A)')) { n = n.replace('(A)',''); tags += '<span class="tag a">A</span>'; }
   if (sp === '2') tags += '<span class="tag sp2">★★</span>';
   else if (sp === '1') tags += '<span class="tag sp1">★</span>';
-  return `<span class="pnm">${n.trim()}</span>${tags}`;
+  const nameHtml = (ns && ns.url)
+    ? `<a class="pnm player-link" href="${ns.url}" target="_blank" rel="noopener noreferrer">${n.trim()}</a>`
+    : `<span class="pnm">${n.trim()}</span>`;
+  return `${nameHtml}${tags}`;
 }
 
 function ijTag(ij) {
@@ -679,8 +687,8 @@ function skaterRow(p) {
   const ns = p._ns;
   return `<tr>
     <td class="left" style="color:var(--muted);font-size:11px;min-width:22px">${p.n}</td>
-    <td class="left" style="min-width:160px">${nameTags(p.nm, p.sp)}${ijTag(p.ij)}</td>
-    <td class="left"><span class="pos">${p.p}</span></td>
+    <td class="left" style="min-width:160px">${nameTags(p.nm, p.sp, p._ns)}${ijTag(p.ij)}</td>
+    <td class="left"><span class="pos">${(p._ns && p._ns.pos) || p.p}</span></td>
     <td>${ovPill(p.ov)}</td>
     ${nhlCell(ns.gp)}
     ${nhlCell(ns.g, 'nhl-g')}
@@ -717,7 +725,7 @@ function goalieRow(g) {
   const svp = ns.svp ? parseFloat(ns.svp).toFixed(3) : '';
   const gaa = ns.gaa ? parseFloat(ns.gaa).toFixed(2) : '';
   return `<tr>
-    <td class="left" style="min-width:160px">${nameTags(g.nm, g.sp)}${ijTag(g.ij)}</td>
+    <td class="left" style="min-width:160px">${nameTags(g.nm, g.sp, g._ns)}${ijTag(g.ij)}</td>
     <td>${ovPill(g.ov)}</td>
     ${nhlCell(ns.gp)}
     ${nhlCell(ns.w)}
@@ -1020,7 +1028,7 @@ function renderSearch(query) {
     const gp  = ns.gp  !== undefined ? ns.gp  : '—';
     const pts = ns.pts !== undefined ? ns.pts : '—';
     return `<tr class="search-hit-row" onclick="navigate('${r.team}','${r.type}')">
-      <td class="left" style="min-width:160px">${nameTags(r.nm, r.sp)}${ijTag(r.ij)}</td>
+      <td class="left" style="min-width:160px">${nameTags(r.nm, r.sp, r._ns)}${ijTag(r.ij)}</td>
       <td class="left"><span class="pos">${r.pos}</span></td>
       <td class="left" style="color:var(--amber);font-weight:700">${r.team}</td>
       <td class="left"><span class="roster-tag ${r.type}" style="font-size:9px;padding:2px 6px">${r.type}</span></td>
