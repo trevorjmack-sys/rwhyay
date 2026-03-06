@@ -630,7 +630,13 @@ function nhlCombine(a, b) {
 function nhlLookup(nm) {
   const k = cleanNHLKey(nm);
   if (_season === '2526') return NS[k]   || {};
-  if (_season === '2425') return NS24[k] || {};
+  if (_season === '2425') {
+    const cur = NS[k] || {};
+    const prev = Object.assign({}, NS24[k] || {});
+    if (cur.url) prev.url = cur.url;
+    if (cur.pos) prev.pos = cur.pos;
+    return prev;
+  }
   const cur = NS[k] || {};
   const combined = nhlCombine(NS24[k], cur);  // combined
   if (cur.url) combined.url = cur.url;         // carry through link / pos metadata
