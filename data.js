@@ -94,7 +94,7 @@ window.RWHA_DATA = {
         "ov": "75",
         "ta": "",
         "sp": "0",
-        "age": "36",
+        "age": "37",
         "c": "2",
         "sal": "$4,500,000"
       },
@@ -1082,7 +1082,7 @@ window.RWHA_DATA = {
         "ov": "67",
         "ta": "",
         "sp": "0",
-        "age": "23",
+        "age": "24",
         "c": "1",
         "sal": "$800,000"
       }
@@ -3913,7 +3913,7 @@ window.RWHA_DATA = {
         "ov": "76",
         "ta": "",
         "sp": "0",
-        "age": "24",
+        "age": "25",
         "c": "3",
         "sal": "$5,750,000"
       },
@@ -4339,7 +4339,7 @@ window.RWHA_DATA = {
       {
         "nm": "Jacob Markstrom",
         "p": "G",
-        "con": "99",
+        "con": "100",
         "ij": "",
         "sk": "65",
         "du": "79",
@@ -4386,7 +4386,7 @@ window.RWHA_DATA = {
         "ov": "65",
         "ta": "",
         "sp": "0",
-        "age": "37",
+        "age": "38",
         "c": "1",
         "sal": "$2,967,000"
       }
@@ -5054,7 +5054,7 @@ window.RWHA_DATA = {
         "n": "7",
         "nm": "Artemi Panarin",
         "p": "L",
-        "con": "100",
+        "con": "99",
         "ij": "",
         "ck": "59",
         "fg": "40",
@@ -5084,7 +5084,7 @@ window.RWHA_DATA = {
         "n": "9",
         "nm": "Jonathan Drouin",
         "p": "R",
-        "con": "53",
+        "con": "63",
         "ij": "1M",
         "ck": "61",
         "fg": "41",
@@ -5376,7 +5376,7 @@ window.RWHA_DATA = {
         "ov": "78",
         "ta": "",
         "sp": "0",
-        "age": "27",
+        "age": "28",
         "c": "3",
         "sal": "$2,750,000"
       },
@@ -7891,7 +7891,7 @@ window.RWHA_DATA = {
     "ps": [
       {
         "n": "1",
-        "nm": "Sidney Crosby",
+        "nm": "Sidney Crosby(C)",
         "p": "C",
         "con": "100",
         "ij": "",
@@ -8131,7 +8131,7 @@ window.RWHA_DATA = {
       },
       {
         "n": "10",
-        "nm": "Alex Ovechkin(C)",
+        "nm": "Alex Ovechkin(A)",
         "p": "L",
         "con": "100",
         "ij": "",
@@ -8253,7 +8253,7 @@ window.RWHA_DATA = {
         "n": "14",
         "nm": "Nikita Kucherov",
         "p": "R",
-        "con": "99",
+        "con": "100",
         "ij": "",
         "ck": "61",
         "fg": "51",
@@ -8281,7 +8281,7 @@ window.RWHA_DATA = {
       },
       {
         "n": "15",
-        "nm": "Moritz Seider",
+        "nm": "Moritz Seider(A)",
         "p": "D",
         "con": "100",
         "ij": "",
@@ -10145,7 +10145,7 @@ window.RWHA_DATA = {
         "ov": "85",
         "ta": "",
         "sp": "0",
-        "age": "32",
+        "age": "33",
         "c": "7",
         "sal": "$8,500,000"
       },
@@ -12345,7 +12345,7 @@ window.RWHA_DATA = {
         "ov": "80",
         "ta": "",
         "sp": "0",
-        "age": "30",
+        "age": "31",
         "c": "5",
         "sal": "$5,127,000"
       },
@@ -13729,7 +13729,7 @@ window.RWHA_DATA = {
         "n": "11",
         "nm": "William Nylander",
         "p": "R",
-        "con": "99",
+        "con": "100",
         "ij": "",
         "ck": "59",
         "fg": "41",
@@ -14289,7 +14289,7 @@ window.RWHA_DATA = {
         "ov": "65",
         "ta": "",
         "sp": "0",
-        "age": "28",
+        "age": "29",
         "c": "1",
         "sal": "$775,000"
       },
@@ -14409,7 +14409,7 @@ window.RWHA_DATA = {
         "ov": "62",
         "ta": "",
         "sp": "0",
-        "age": "22",
+        "age": "23",
         "c": "3",
         "sal": "$863,334"
       },
@@ -17354,7 +17354,7 @@ window.RWHA_DATA = {
         "ov": "77",
         "ta": "",
         "sp": "0",
-        "age": "37",
+        "age": "38",
         "c": "1",
         "sal": "$775,000"
       },
@@ -18646,7 +18646,7 @@ window.RWHA_DATA = {
       {
         "nm": "Tristan Jarry",
         "p": "G",
-        "con": "100",
+        "con": "99",
         "ij": "",
         "sk": "63",
         "du": "72",
@@ -20129,7 +20129,7 @@ window.RWHA_DATA = {
       },
       {
         "n": "8",
-        "nm": "Chris Kreider",
+        "nm": "Chris Kreider(A)",
         "p": "L",
         "con": "100",
         "ij": "",
@@ -20429,7 +20429,7 @@ window.RWHA_DATA = {
       },
       {
         "n": "18",
-        "nm": "Brent Burns",
+        "nm": "Brent Burns(C)",
         "p": "D",
         "con": "100",
         "ij": "",
@@ -20688,7 +20688,7 @@ window.RWHA_DATA = {
         "ov": "76",
         "ta": "",
         "sp": "0",
-        "age": "20",
+        "age": "21",
         "c": "3",
         "sal": "$950,000"
       },
@@ -21428,7 +21428,7 @@ window.RWHA_DATA = {
         "n": "17",
         "nm": "Adam Pelech",
         "p": "D",
-        "con": "100",
+        "con": "99",
         "ij": "",
         "ck": "77",
         "fg": "44",
@@ -22628,7 +22628,7 @@ window.RWHA_DATA = {
         "ov": "77",
         "ta": "",
         "sp": "0",
-        "age": "33",
+        "age": "34",
         "c": "7",
         "sal": "$6,500,000"
       },
