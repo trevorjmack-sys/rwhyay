@@ -417,36 +417,36 @@ const TEAMS = Object.keys(D).sort();
 let _season = '2526';
 let _currentTeam = null, _currentType = null;
 
-// ── League standings (scraped 2026-03-15, ~55 GP played, 82 GP season) ──────
+// ── League standings (scraped 2026-03-22, ~59 GP played, 82 GP season) ──────
 // Projection model: remaining schedule × team OV win-probability (logistic, k=0.20)
-// OT rate this season: 0.182
+// OT rate this season: 0.186
 // cur = current conf rank, pts = current points, pct = points pct,
 // rem = games remaining, proj = projected final pts, projPos = projected conf rank
 const STANDINGS = {
   // Wales Conference  (cur = current rank by pts; projPos = projected rank by model)
-  'Gladiators': { conf:'W', cur:1,  pts:78, gp:56, pct:0.696, rem:26, proj:107, projPos:1  },
-  'Fletushkas': { conf:'W', cur:2,  pts:67, gp:56, pct:0.598, rem:26, proj:99, projPos:2  },
-  'Warheads': { conf:'W', cur:3,  pts:66, gp:54, pct:0.611, rem:28, proj:97, projPos:4  },
-  'Bunnies': { conf:'W', cur:4,  pts:65, gp:55, pct:0.591, rem:27, proj:91, projPos:5  },
-  'Jets': { conf:'W', cur:5,  pts:62, gp:57, pct:0.544, rem:25, proj:97, projPos:3  },
-  'Clan': { conf:'W', cur:6,  pts:59, gp:56, pct:0.527, rem:26, proj:83, projPos:8  },
-  'Flyers': { conf:'W', cur:7,  pts:57, gp:57, pct:0.5, rem:25, proj:85, projPos:7  },
-  'Giants': { conf:'W', cur:8,  pts:54, gp:56, pct:0.482, rem:26, proj:88, projPos:6  },
-  'Mongoloids': { conf:'W', cur:9,  pts:52, gp:56, pct:0.464, rem:26, proj:80, projPos:9  },
-  'Riots': { conf:'W', cur:10,  pts:47, gp:56, pct:0.42, rem:25, proj:66, projPos:11  },
-  'Aces': { conf:'W', cur:11,  pts:44, gp:57, pct:0.386, rem:25, proj:66, projPos:10  },
+  'Gladiators': { conf:'W', cur:1,  pts:83, gp:59, pct:0.703, rem:22, proj:107, projPos:1  },
+  'Bunnies': { conf:'W', cur:2,  pts:70, gp:59, pct:0.593, rem:23, proj:91, projPos:5  },
+  'Warheads': { conf:'W', cur:3,  pts:70, gp:57, pct:0.614, rem:25, proj:98, projPos:2  },
+  'Fletushkas': { conf:'W', cur:4,  pts:67, gp:59, pct:0.568, rem:23, proj:96, projPos:3  },
+  'Jets': { conf:'W', cur:5,  pts:65, gp:60, pct:0.542, rem:22, proj:96, projPos:4  },
+  'Clan': { conf:'W', cur:6,  pts:63, gp:59, pct:0.534, rem:23, proj:84, projPos:8  },
+  'Flyers': { conf:'W', cur:7,  pts:62, gp:60, pct:0.517, rem:22, proj:87, projPos:6  },
+  'Giants': { conf:'W', cur:8,  pts:56, gp:59, pct:0.475, rem:23, proj:86, projPos:7  },
+  'Mongoloids': { conf:'W', cur:9,  pts:54, gp:60, pct:0.45, rem:22, proj:77, projPos:9  },
+  'Riots': { conf:'W', cur:10,  pts:49, gp:60, pct:0.408, rem:22, proj:65, projPos:11  },
+  'Aces': { conf:'W', cur:11,  pts:48, gp:60, pct:0.4, rem:22, proj:68, projPos:10  },
   // Campbell Conference
-  'Oilers': { conf:'C', cur:1,  pts:86, gp:56, pct:0.768, rem:26, proj:117, projPos:1  },
-  'Shitbirds': { conf:'C', cur:2,  pts:78, gp:57, pct:0.684, rem:25, proj:115, projPos:2  },
-  'Phantoms': { conf:'C', cur:3,  pts:68, gp:56, pct:0.607, rem:25, proj:96, projPos:4  },
-  'Meltdown': { conf:'C', cur:4,  pts:68, gp:55, pct:0.618, rem:27, proj:95, projPos:6  },
-  'Steamers': { conf:'C', cur:5,  pts:65, gp:56, pct:0.58, rem:26, proj:99, projPos:3  },
-  'Mariners': { conf:'C', cur:6,  pts:64, gp:55, pct:0.582, rem:27, proj:91, projPos:7  },
-  'Marauders': { conf:'C', cur:7,  pts:61, gp:56, pct:0.545, rem:26, proj:96, projPos:5  },
-  'Snowdogs': { conf:'C', cur:8,  pts:56, gp:55, pct:0.509, rem:27, proj:78, projPos:10  },
-  'WaffleBots': { conf:'C', cur:9,  pts:56, gp:56, pct:0.5, rem:26, proj:86, projPos:8  },
-  'Cunts': { conf:'C', cur:10,  pts:54, gp:56, pct:0.482, rem:26, proj:78, projPos:9  },
-  'Chiefs': { conf:'C', cur:11,  pts:35, gp:56, pct:0.312, rem:26, proj:56, projPos:11  },
+  'Oilers': { conf:'C', cur:1,  pts:92, gp:59, pct:0.78, rem:23, proj:120, projPos:1  },
+  'Shitbirds': { conf:'C', cur:2,  pts:81, gp:60, pct:0.675, rem:22, proj:114, projPos:2  },
+  'Phantoms': { conf:'C', cur:3,  pts:74, gp:59, pct:0.627, rem:22, proj:99, projPos:4  },
+  'Steamers': { conf:'C', cur:4,  pts:73, gp:60, pct:0.608, rem:22, proj:102, projPos:3  },
+  'Meltdown': { conf:'C', cur:5,  pts:70, gp:58, pct:0.603, rem:24, proj:94, projPos:6  },
+  'Mariners': { conf:'C', cur:6,  pts:66, gp:58, pct:0.569, rem:24, proj:90, projPos:7  },
+  'Marauders': { conf:'C', cur:7,  pts:66, gp:59, pct:0.559, rem:23, proj:97, projPos:5  },
+  'Snowdogs': { conf:'C', cur:8,  pts:60, gp:59, pct:0.508, rem:23, proj:79, projPos:9  },
+  'WaffleBots': { conf:'C', cur:9,  pts:59, gp:60, pct:0.492, rem:22, proj:84, projPos:8  },
+  'Cunts': { conf:'C', cur:10,  pts:58, gp:60, pct:0.483, rem:22, proj:79, projPos:10  },
+  'Chiefs': { conf:'C', cur:11,  pts:39, gp:60, pct:0.325, rem:22, proj:57, projPos:11  },
 };
 function ordinal(n) { return n+(n===1?'st':n===2?'nd':n===3?'rd':'th'); }
 
