@@ -9,9 +9,11 @@
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <!-- Security: CSP locks down resource origins; noindex keeps it off search engines -->
 <meta http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; form-action 'none'; frame-ancestors 'none'; base-uri 'self';">
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cloud.umami.is; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://cloud.umami.is; form-action 'none'; frame-ancestors 'none'; base-uri 'self';">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex, nofollow">
+<!-- Umami Analytics — invisible, no cookie banner needed. Dashboard: https://cloud.umami.is -->
+<script defer src="https://cloud.umami.is/script.js" data-website-id="79f36f1d-1ecd-4b8f-9237-8183dbbf95c5"></script>
 <style>
 /* ── Reset ────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
