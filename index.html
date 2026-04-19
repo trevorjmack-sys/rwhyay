@@ -362,6 +362,20 @@ tbody td.fant-col { background: var(--fant-zone); }
 .card-rivalry.under   { background: rgba(220,70,30,.13);  border-left: 3px solid #d06040; color: #e89878; }
 .card-rivalry.over    { background: rgba(50,190,90,.10);  border-left: 3px solid #44b868; color: #66d888; }
 .card-rivalry.vanilla { background: rgba(220,200,150,.07); border-left: 3px solid #9e8e60; color: #b8a878; }
+.card-rivalry.elim    { background: rgba(160,40,20,.10);  border-left: 3px solid #7a2818; color: #c07868; }
+
+/* ── Playoff indicator badges ───────────────────────────────────────────── */
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; }
+.card-head h3 { flex: 1; }
+.playoff-badge { font-size: 9px; font-weight: 800; letter-spacing: 0.8px; padding: 2px 5px; border-radius: 2px; flex-shrink: 0; margin-top: 1px; }
+.pb-z { background: #2a1f06; color: #f0a000; border: 1px solid #d07c0a; }
+.pb-y { background: #071828; color: #64b8e8; border: 1px solid #2a6890; }
+.pb-x { background: #0a1f10; color: #5ecf80; border: 1px solid #254030; }
+.pb-e { background: #1a0a08; color: #c07060; border: 1px solid #6a2818; }
+.team-card.card-e { border-top-color: #4a1810; }
+.team-card.card-e:hover { border-top-color: #8a3020; }
+.card-std-badge.final { background: #1a1e10; color: #78c050; border: 1px solid #3a5820; }
+.card-std-badge.elim  { background: #1a0e0a; color: #c07060; border: 1px solid #5a2010; }
 
 /* ── Season selector ─────────────────────────────────────────────────────── */
 .season-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -419,36 +433,33 @@ const TEAMS = Object.keys(D).sort();
 let _season = '2526';
 let _currentTeam = null, _currentType = null;
 
-// ── League standings (scraped 2026-04-19, ~74 GP played, 82 GP season) ──────
-// Projection model: remaining schedule × team OV win-probability (logistic, k=0.20)
-// OT rate this season: 0.175
-// cur = current conf rank, pts = current points, pct = points pct,
-// rem = games remaining, proj = projected final pts, projPos = projected conf rank
+// ── League standings — FINAL 2025-26 (82 GP, sourced from rwha.net/Standing.php) ─
+// playoff: z=division champ, y=other div champ, x=playoff berth, e=eliminated
 const STANDINGS = {
-  // Wales Conference  (cur = current rank by pts; projPos = projected rank by model)
-  'Gladiators': { conf:'W', cur:1,  pts:108, gp:79, pct:0.684, rem:0, proj:108, projPos:1  },
-  'Fletushkas': { conf:'W', cur:2,  pts:96, gp:80, pct:0.6, rem:0, proj:96, projPos:2  },
-  'Warheads': { conf:'W', cur:3,  pts:94, gp:80, pct:0.588, rem:0, proj:94, projPos:3  },
-  'Jets': { conf:'W', cur:4,  pts:91, gp:80, pct:0.569, rem:0, proj:91, projPos:4  },
-  'Bunnies': { conf:'W', cur:5,  pts:90, gp:80, pct:0.562, rem:0, proj:90, projPos:5  },
-  'Clan': { conf:'W', cur:6,  pts:88, gp:80, pct:0.55, rem:0, proj:88, projPos:6  },
-  'Flyers': { conf:'W', cur:7,  pts:82, gp:79, pct:0.519, rem:0, proj:82, projPos:7  },
-  'Mongoloids': { conf:'W', cur:8,  pts:81, gp:80, pct:0.506, rem:0, proj:81, projPos:8  },
-  'Giants': { conf:'W', cur:9,  pts:80, gp:80, pct:0.5, rem:0, proj:80, projPos:9  },
-  'Riots': { conf:'W', cur:10,  pts:63, gp:80, pct:0.394, rem:0, proj:63, projPos:10  },
-  'Aces': { conf:'W', cur:11,  pts:61, gp:79, pct:0.386, rem:0, proj:61, projPos:11  },
+  // Wales Conference
+  'Gladiators': { conf:'W', cur:1,  pts:109, gp:82, playoff:'z' },
+  'Fletushkas': { conf:'W', cur:2,  pts:100, gp:82, playoff:'y' },
+  'Jets':       { conf:'W', cur:3,  pts:95,  gp:82, playoff:'x' },
+  'Warheads':   { conf:'W', cur:4,  pts:94,  gp:82, playoff:'x' },
+  'Bunnies':    { conf:'W', cur:5,  pts:92,  gp:82, playoff:'x' },
+  'Clan':       { conf:'W', cur:6,  pts:90,  gp:82, playoff:'x' },
+  'Flyers':     { conf:'W', cur:7,  pts:87,  gp:82, playoff:'x' },
+  'Mongoloids': { conf:'W', cur:8,  pts:84,  gp:82, playoff:'x' },
+  'Giants':     { conf:'W', cur:9,  pts:80,  gp:82, playoff:'e' },
+  'Riots':      { conf:'W', cur:10, pts:63,  gp:82, playoff:'e' },
+  'Aces':       { conf:'W', cur:11, pts:63,  gp:82, playoff:'e' },
   // Campbell Conference
-  'Oilers': { conf:'C', cur:1,  pts:105, gp:74, pct:0.709, rem:0, proj:105, projPos:1  },
-  'Phantoms': { conf:'C', cur:2,  pts:99, gp:79, pct:0.627, rem:0, proj:99, projPos:2  },
-  'Mariners': { conf:'C', cur:3,  pts:97, gp:79, pct:0.614, rem:0, proj:97, projPos:3  },
-  'Steamers': { conf:'C', cur:4,  pts:91, gp:79, pct:0.576, rem:0, proj:91, projPos:4  },
-  'Marauders': { conf:'C', cur:5,  pts:90, gp:79, pct:0.57, rem:0, proj:90, projPos:5  },
-  'WaffleBots': { conf:'C', cur:6,  pts:86, gp:74, pct:0.581, rem:0, proj:86, projPos:6  },
-  'Meltdown': { conf:'C', cur:7,  pts:85, gp:74, pct:0.574, rem:0, proj:85, projPos:7  },
-  'Snowdogs': { conf:'C', cur:8,  pts:84, gp:79, pct:0.532, rem:0, proj:84, projPos:8  },
-  'Cunts': { conf:'C', cur:9,  pts:76, gp:78, pct:0.487, rem:0, proj:76, projPos:9  },
-  'Chiefs': { conf:'C', cur:10,  pts:51, gp:68, pct:0.375, rem:0, proj:51, projPos:10  },
-  'Shitbirds': { conf:'C', cur:11,  pts:0, gp:0, pct:0, rem:0, proj:0, projPos:11  },
+  'Oilers':     { conf:'C', cur:1,  pts:118, gp:82, playoff:'z' },
+  'Phantoms':   { conf:'C', cur:2,  pts:102, gp:82, playoff:'y' },
+  'Shitdawgs':  { conf:'C', cur:3,  pts:107, gp:82, playoff:'x' },
+  'Mariners':   { conf:'C', cur:4,  pts:99,  gp:82, playoff:'x' },
+  'Steamers':   { conf:'C', cur:5,  pts:95,  gp:82, playoff:'x' },
+  'Marauders':  { conf:'C', cur:6,  pts:94,  gp:82, playoff:'x' },
+  'Meltdown':   { conf:'C', cur:7,  pts:91,  gp:82, playoff:'x' },
+  'WaffleBots': { conf:'C', cur:8,  pts:91,  gp:82, playoff:'x' },
+  'Snowdogs':   { conf:'C', cur:9,  pts:86,  gp:82, playoff:'e' },
+  'Cunts':      { conf:'C', cur:10, pts:81,  gp:82, playoff:'e' },
+  'Chiefs':     { conf:'C', cur:11, pts:61,  gp:82, playoff:'e' },
 };
 function ordinal(n) { return n+(n===1?'st':n===2?'nd':n===3?'rd':'th'); }
 
@@ -471,6 +482,19 @@ function rivalrySnark(t, st) {
   else if (delta <= -5) return `<div class="card-rivalry over">OV-${ov} roster is only ${ovOrd}-rated in the ${conf} — somehow ${curOrd}?! 🔥</div>`;
   else if (delta <= -2) return `<div class="card-rivalry over">OV-${ov} roster only ${ovOrd} in the ${conf} — punching up at ${curOrd} 💪</div>`;
   return `<div class="card-rivalry vanilla">OV-${ov} roster rates ${ovOrd} in the ${conf} — performing as expected 🍦</div>`;
+}
+
+// ── Eliminated team blurbs ─────────────────────────────────────────────────
+function elimBlurb(t) {
+  const blurbs = {
+    'Giants':    "OV-80 and still watching from the couch. The Fry sure didn't cook in time, Gavin. 🛋️",
+    'Riots':     "63 points and a long summer. At least the Harvesters had a field day, Wade. 🌾",
+    'Aces':      "Last in the Wales, 63 points, tied with the Riots. The Meatballs couldn't save this one, Lee. 🥩",
+    'Snowdogs':  "86 points and still on the outside. Campbell's got teeth, Simon. Back across the Rainbow Bridge. 🌈",
+    'Cunts':     "81 points — just a slap short. A long offseason awaits, Jarvis. 🤌",
+    'Chiefs':    "Bottom of the Campbell, 61 points. The Bombers dropped more than they landed, Dan. 💣",
+  };
+  return `<div class="card-rivalry elim">${blurbs[t] || 'Better luck next year. 🍀'}</div>`;
 }
 
 // ── Sort state ─────────────────────────────────────────────────────────────
@@ -1085,29 +1109,25 @@ function renderHome() {
   const cards = TEAMS.map(t => {
     const tm = D[t];
     const st = STANDINGS[t];
+    const pb = st?.playoff || '';
     let stdHtml = '';
     if (st) {
       const confFull = st.conf === 'W' ? 'Wales' : 'Campbell';
       const curLabel = `${confFull} · ${ordinal(st.cur)}`;
-      const projLabel = `${confFull} · ${ordinal(st.projPos)}`;
-      const pctPct = (st.pct * 100).toFixed(1);
+      const isElim = pb === 'e';
       stdHtml = `
       <div class="card-standings">
         <div class="card-std-row">
-          <span class="card-std-badge cur">NOW</span>
+          <span class="card-std-badge ${isElim ? 'elim' : 'final'}">FINAL</span>
           <span class="card-std-pts">${st.pts} pts</span>
           <span class="card-std-meta">${curLabel}</span>
         </div>
-        <div class="card-std-row">
-          <span class="card-std-badge proj">PROJ</span>
-          <span class="card-std-pts">~${st.proj} pts</span>
-          <span class="card-std-meta">${projLabel}</span>
-        </div>
-        ${rivalrySnark(t, st)}
+        ${isElim ? elimBlurb(t) : rivalrySnark(t, st)}
       </div>`;
     }
-    return `<div class="team-card" onclick="navigate('${t}','pro')">
-      <h3>${t}</h3>
+    const pbHtml = pb ? `<span class="playoff-badge pb-${pb}">${pb.toUpperCase()}</span>` : '';
+    return `<div class="team-card card-${pb}" onclick="navigate('${t}','pro')">
+      <div class="card-head"><h3>${t}</h3>${pbHtml}</div>
       <div class="card-gm">${tm.gm}</div>
       <div class="card-foot">
         <span class="card-ov">${tm.po}</span>
