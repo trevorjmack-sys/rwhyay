@@ -58,19 +58,36 @@ _SSL_CTX.check_hostname = False
 _SSL_CTX.verify_mode = ssl.CERT_NONE
 
 
-def fetch_json(path: str, retries: int = 3):
+def fetch_json(path: str, retries: int = 4):
+    """GET a rwha.net JSON endpoint.
+
+    rwha.net is a small server: it sometimes stalls, and while the league
+    data is being regenerated its JSON endpoints can briefly return an empty
+    or non-JSON body.  Retry with a long backoff, and log what came back so a
+    failure in the Actions log shows the real response.
+    """
     url = f'{BASE_URL}{path}'
     for attempt in range(1, retries + 1):
         try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (rwha-stats-site)'})
-            with urllib.request.urlopen(req, context=_SSL_CTX, timeout=30) as r:
-                return json.loads(r.read().decode('utf-8', errors='replace'))
+            req = urllib.request.Request(url, headers={
+                'User-Agent': 'Mozilla/5.0 (rwha-stats-site)',
+                'Accept': 'application/json',
+                'Cache-Control': 'no-cache',
+            })
+            with urllib.request.urlopen(req, context=_SSL_CTX, timeout=60) as r:
+                status, ctype = r.status, r.headers.get('Content-Type', '')
+                body = r.read().decode('utf-8', errors='replace')
+            try:
+                return json.loads(body)
+            except json.JSONDecodeError:
+                raise ValueError(f'HTTP {status}, {ctype or "no content-type"}, '
+                                 f'{len(body)} bytes, not JSON: {body[:200]!r}')
         except Exception as e:  # noqa: BLE001
             if attempt == retries:
                 raise
-            print(f'  retry {attempt} for {path}: {e}', file=sys.stderr)
-            time.sleep(2 * attempt)
-
+            wait = 30 * attempt
+            print(f'  {path}: {e} — retry {attempt}/{retries - 1} in {wait}s', file=sys.stderr, flush=True)
+            time.sleep(wait)
 
 # ── Helpers ─────────────────────────────────────────────────────────────────────
 POS_MAP = {'C': 'C', 'LW': 'L', 'RW': 'R', 'D': 'D', 'G': 'G'}
@@ -208,10 +225,12 @@ def main():
             'fs':   farm_s,
             'fg':   farm_g,
         }
-        time.sleep(0.3)   # be polite to rwha.net
+        time.sleep(1.0)   # be polite to rwha.net
 
     # GM names only appear in the team page HTML ("GM: <b>Name</b>").
     for name, d in data.items():
+        if d['gm']:
+            continue          # already known from last run — skip the page fetch
         try:
             req = urllib.request.Request(d['url'], headers={'User-Agent': 'Mozilla/5.0 (rwha-stats-site)'})
             with urllib.request.urlopen(req, context=_SSL_CTX, timeout=30) as r:
@@ -221,7 +240,7 @@ def main():
                 d['gm'] = m.group(1).strip()
         except Exception as e:  # noqa: BLE001
             print(f'  (GM lookup failed for {name}: {e})', file=sys.stderr)
-        time.sleep(0.3)
+        time.sleep(1.0)
 
     n_teams = len(data)
     players = sum(len(v['ps']) + len(v['pg']) + len(v['fs']) + len(v['fg']) for v in data.values())

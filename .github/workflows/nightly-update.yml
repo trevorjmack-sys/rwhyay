@@ -47,8 +47,11 @@ jobs:
         with:
           python-version: '3.11'
 
+      # If rwha.net is unreachable, keep yesterday's rosters and carry on so
+      # the NHL stats still update (the run shows a warning instead of failing).
       - name: Update rosters from rwha.net (data.js)
         if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
         run: python .github/scripts/update_data.py
 
       - name: Update NHL stats from NHL.com (nhl_stats.js, nhl_stats_prev.js)
