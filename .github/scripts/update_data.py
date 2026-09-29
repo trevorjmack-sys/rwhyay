@@ -59,11 +59,10 @@ def is_fictional(p: dict) -> bool:
     return po is not None and po <= FICTIONAL_MAX_PO and p.get('salary') == FICTIONAL_SALARY
 
 
-# Teams renamed since last season → old key, so farm-team names carry over.
-PREVIOUS_TEAM_NAMES = {
-    'Shitbirds': 'Shitdawgs',
-    'Boobys':    'WaffleBots',
-}
+# Team names change (WaffleBots → Boobys, Shitdawgs → Shitbirds), so teams are
+# matched to last run's data by rwha.net's permanent team number instead
+# (league.php "number", e.g. Aces = 2).  Names are only a fallback.
+GM_REFRESH_WEEKDAY = 0   # Monday: re-read every team's GM in case one changed
 
 # ── Fetch ───────────────────────────────────────────────────────────────────────
 # rwha.net has had an expired SSL cert in the past; verification is disabled
@@ -214,6 +213,9 @@ def main():
         print('ERROR: no teams in league.php — aborting', file=sys.stderr)
         sys.exit(1)
 
+    prev_by_num = {v['num']: v for v in previous.values() if isinstance(v, dict) and 'num' in v}
+    refresh_gms = datetime.now(timezone.utc).weekday() == GM_REFRESH_WEEKDAY
+
     data = {}
     for t in sorted(teams, key=lambda x: x['name']):
         name = t['name']
@@ -225,9 +227,12 @@ def main():
         pro_s, pro_g = split(pro + scratch)
         farm_s, farm_g = split(farm)
 
-        prev = previous.get(name) or previous.get(PREVIOUS_TEAM_NAMES.get(name, ''), {})
+        prev = prev_by_num.get(t['number']) or previous.get(name) or {}
+        if prev and prev.get('n') and prev['n'] != name:
+            print(f'  (team #{t["number"]} renamed: {prev["n"]} → {name})', file=sys.stderr)
         data[name] = {
             'n':    name,
+            'num':  t['number'],          # permanent rwha.net team id
             'city': t.get('city', ''),
             'abbr': t.get('abbre', ''),
             'conf': t.get('conference', ''),
@@ -248,7 +253,7 @@ def main():
 
     # GM names only appear in the team page HTML ("GM: <b>Name</b>").
     for name, d in data.items():
-        if d['gm']:
+        if d['gm'] and not refresh_gms:
             continue          # already known from last run — skip the page fetch
         try:
             req = urllib.request.Request(d['url'], headers={'User-Agent': 'Mozilla/5.0 (rwha-stats-site)'})
