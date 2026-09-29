@@ -31,18 +31,33 @@ from pathlib import Path
 BASE_URL  = os.environ.get('RWHA_BASE_URL', 'http://www.rwha.net').rstrip('/')
 DATA_FILE = Path('data.js')
 
-# Fictional players (league in-jokes) are left off the stats site.
-# The old site detected them by their joke profile links; the new JSON has no
-# such links, so this list is now the only filter.  Add names here as needed.
-FICTIONAL_NAMES = {
-    'Lee Mack', 'Nipples Tenderloin', 'Danny Massawhip', 'Chu Kock',
-    'Rick Spreadum', 'Manly Rymjob', 'Shitty-Kitty Gangbang',
-    'El Burrito Peligroso', 'Cockring Bomber', 'Wrinkles Cumbersnatch',
-    'Mulvinder Bitchtits', 'Ricky Cumalot', 'Hugo Drax', 'Wee Kawk',
-    'Manson Gluehead', 'Todd Harkness', 'Velyki Hospador',
-    'Buck Phucksalot', 'Moxie Manslammer', 'Douche Larouche',
-    'Raccoon Willie', 'Brock Knuckledunker',
+# ── Fictional players (league in-jokes) are left off the stats site ──────────
+# Names change often, so detection doesn't rely on them.  Every fictional
+# "GM player" on rwha.net shares a fingerprint no real player has:
+#   • Potential (PO) rating of 1, and
+#   • a salary of exactly $8,500,000
+# (Checked Sep 2026: matches all 22 fictional players, 0 of 814 real ones.)
+FICTIONAL_SALARY = 8_500_000
+FICTIONAL_MAX_PO = 1
+
+# rwha.net player ids (the number in players/p<ID>.html) stay the same when a
+# player is renamed, so they're a stable way to force a decision either way.
+FICTIONAL_IDS: set = {
+    2, 5, 8, 13, 15, 19, 24, 25, 26, 37, 87, 409, 472, 494, 635, 841,
+    1311, 2062, 2070, 2071, 2075, 2077,
 }
+ALWAYS_REAL_IDS: set = set()   # add an id here if a real player is ever caught by mistake
+
+
+def is_fictional(p: dict) -> bool:
+    pid = p.get('id')
+    if pid in ALWAYS_REAL_IDS:
+        return False
+    if pid in FICTIONAL_IDS:
+        return True
+    po = (p.get('ratings') or {}).get('PO')
+    return po is not None and po <= FICTIONAL_MAX_PO and p.get('salary') == FICTIONAL_SALARY
+
 
 # Teams renamed since last season → old key, so farm-team names carry over.
 PREVIOUS_TEAM_NAMES = {
@@ -148,10 +163,14 @@ def parse_goalie(p: dict) -> dict:
     return out
 
 
+EXCLUDED: list = []
+
+
 def split(players: list):
     skaters, goalies = [], []
     for p in players:
-        if (p.get('name') or '').strip() in FICTIONAL_NAMES:
+        if is_fictional(p):
+            EXCLUDED.append(f"{p.get('name')} (id {p.get('id')})")
             continue
         if p.get('kind') == 'goalie':
             goalies.append(parse_goalie(p))
@@ -245,6 +264,7 @@ def main():
     n_teams = len(data)
     players = sum(len(v['ps']) + len(v['pg']) + len(v['fs']) + len(v['fg']) for v in data.values())
     print(f'Parsed {n_teams} teams, {players} players', file=sys.stderr)
+    print(f'Left off {len(EXCLUDED)} fictional players: ' + ', '.join(sorted(EXCLUDED)), file=sys.stderr)
 
     if n_teams < 20 or players < 300:
         print('ERROR: suspiciously little data — not overwriting data.js', file=sys.stderr)
