@@ -425,14 +425,14 @@ tbody td.fant-col { background: var(--fant-zone); }
 'use strict';
 const D    = window.RWHA_DATA;
 const NS   = window.NHL_STATS      || {};   // current NHL season (nhl_stats.js)
-const NS24 = window.NHL_STATS_PREV || {};   // previous NHL season (nhl_stats_prev.js)
+const NS24 = window.NHL_STATS_PREV || {};   // previous 2 NHL seasons combined (nhl_stats_prev.js)
 const CUR_LBL  = window.NHL_SEASON_LABEL || '2026-27';
-const PREV_LBL = window.NHL_PREV_LABEL   || '2025-26';
-const COMB_LBL = PREV_LBL.slice(0, 4) + '-20' + CUR_LBL.slice(-2);
+const PREV_LBL = window.NHL_PREV_LABEL   || '2024-25 + 2025-26';
+const PREV_SHORT = PREV_LBL.slice(0, 4) + '-' + PREV_LBL.slice(-2);   // e.g. 2024-26
 const TEAMS = Object.keys(D).sort();
 
 // ── Season selector state ────────────────────────────────────────────────────
-// 'cur' = current, 'prev' = previous, 'comb' = combined.
+// 'cur' = current season, 'prev' = combined previous 2 seasons.
 // Before the new NHL season has any games, default to last season's stats.
 let _season = Object.values(NS).some(v => v && v.gp) ? 'cur' : 'prev';
 let _currentTeam = null, _currentType = null;
@@ -683,8 +683,7 @@ function nhlLookup(nm) {
 
 function nhlSeasonLabel() {
   if (_season === 'cur')  return 'NHL ' + CUR_LBL;
-  if (_season === 'prev') return 'NHL ' + PREV_LBL;
-  return 'NHL ' + COMB_LBL;
+  return 'NHL ' + PREV_SHORT;
 }
 
 function nameTags(nm, sp, ns) {
@@ -1027,8 +1026,7 @@ function renderRoster(team, type) {
       <label for="season-sel">NHL Stats Season</label>
       <select class="season-sel" id="season-sel" onchange="changeSeason(this.value)">
         <option value="cur"${_season === 'cur' ? ' selected' : ''}>Current Season (${CUR_LBL})</option>
-        <option value="prev"${_season === 'prev' ? ' selected' : ''}>Previous Season (${PREV_LBL})</option>
-        <option value="comb"${_season === 'comb' ? ' selected' : ''}>Combined Seasons (${COMB_LBL})</option>
+        <option value="prev"${_season === 'prev' ? ' selected' : ''}>Combined Prev 2 Seasons (${PREV_LBL})</option>
       </select>
     </div>
 
