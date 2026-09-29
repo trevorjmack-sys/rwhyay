@@ -42,24 +42,35 @@ _SSL_CTX.verify_mode = ssl.CERT_NONE
 
 
 def fetch_json(path: str, retries: int = 4):
-    """GET a rwha.net JSON endpoint, retrying on timeouts / connection errors.
+    """GET a rwha.net JSON endpoint.
 
-    rwha.net is a small server and occasionally stalls (e.g. right after the
-    roster step's burst of requests), so wait and retry before giving up.
+    rwha.net is a small server: it sometimes stalls, and while the league
+    data is being regenerated its JSON endpoints can briefly return an empty
+    or non-JSON body.  Retry with a long backoff, and log what came back so a
+    failure in the Actions log shows the real response.
     """
     url = f'{BASE_URL}{path}'
     for attempt in range(1, retries + 1):
         try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (rwha-stats-site)'})
-            with urllib.request.urlopen(req, timeout=60, context=_SSL_CTX) as r:
-                return json.loads(r.read().decode('utf-8', errors='replace'))
+            req = urllib.request.Request(url, headers={
+                'User-Agent': 'Mozilla/5.0 (rwha-stats-site)',
+                'Accept': 'application/json',
+                'Cache-Control': 'no-cache',
+            })
+            with urllib.request.urlopen(req, context=_SSL_CTX, timeout=60) as r:
+                status, ctype = r.status, r.headers.get('Content-Type', '')
+                body = r.read().decode('utf-8', errors='replace')
+            try:
+                return json.loads(body)
+            except json.JSONDecodeError:
+                raise ValueError(f'HTTP {status}, {ctype or "no content-type"}, '
+                                 f'{len(body)} bytes, not JSON: {body[:200]!r}')
         except Exception as e:  # noqa: BLE001
             if attempt == retries:
                 raise
-            wait = 15 * attempt
-            print(f'  {path}: {e} — retry {attempt}/{retries - 1} in {wait}s', flush=True)
+            wait = 30 * attempt
+            print(f'  {path}: {e} — retry {attempt}/{retries - 1} in {wait}s', file=sys.stderr, flush=True)
             time.sleep(wait)
-
 
 def load_team_ov() -> dict:
     raw = DATA_FILE.read_text(encoding='utf-8')
