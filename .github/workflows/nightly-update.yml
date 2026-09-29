@@ -1,0 +1,73 @@
+name: Nightly update (rosters → NHL stats → standings)
+
+# Runs at 00:00 Pacific every night.
+# GitHub cron is UTC-only, so two triggers are listed and a guard step lets
+# exactly one of them through depending on daylight saving time:
+#   07:00 UTC = midnight PDT (Mar–Nov)
+#   08:00 UTC = midnight PST (Nov–Mar)
+# Note: GitHub may start scheduled runs a few minutes late at busy times.
+# Also triggerable manually from the Actions tab ("Run workflow").
+on:
+  schedule:
+    - cron: '0 7 * * *'
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: site-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Only run at midnight Pacific
+        id: gate
+        run: |
+          offset=$(TZ=America/Los_Angeles date +%z)
+          echo "Pacific offset: $offset  trigger: '${{ github.event.schedule }}'"
+          run=true
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            if [ "${{ github.event.schedule }}" = "0 7 * * *" ] && [ "$offset" != "-0700" ]; then run=false; fi
+            if [ "${{ github.event.schedule }}" = "0 8 * * *" ] && [ "$offset" != "-0800" ]; then run=false; fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Update rosters from rwha.net (data.js)
+        if: steps.gate.outputs.run == 'true'
+        run: python .github/scripts/update_data.py
+
+      - name: Update NHL stats from NHL.com (nhl_stats.js, nhl_stats_prev.js)
+        if: steps.gate.outputs.run == 'true'
+        run: python .github/scripts/update_nhl_stats.py
+
+      - name: Update standings from rwha.net (index.html)
+        if: steps.gate.outputs.run == 'true'
+        run: python .github/scripts/update_standings.py
+
+      - name: Commit and push if anything changed
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add data.js nhl_stats.js nhl_stats_prev.js index.html
+          if git diff --cached --quiet; then
+            echo "Nothing changed — nothing to commit."
+          else
+            git commit -m "Nightly update [$(TZ=America/Los_Angeles date '+%Y-%m-%d')] - ${DATA_TEAMS} teams, ${DATA_PLAYERS} players, NHL ${NHL_LABEL} ${NHL_MATCHED}/${NHL_TOTAL}"
+            git push
+          fi

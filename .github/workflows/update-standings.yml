@@ -1,11 +1,9 @@
 name: Update RWHA Standings
 
-# Runs every Sunday at 15:00 Pacific.
-# 22:00 UTC = 3:00 PM PDT (UTC-7, Mar–Nov) / 2:00 PM PST (UTC-8, Nov–Mar).
-# Also triggerable manually from the Actions tab.
+# Manual-only. The scheduled run is now nightly-update.yml (midnight Pacific),
+# which runs rosters → NHL stats → standings in one go.
+# Use "Run workflow" in the Actions tab to run just this step on demand.
 on:
-  schedule:
-    - cron: '0 22 * * 0'
   workflow_dispatch:
 
 permissions:

@@ -1,10 +1,9 @@
 name: Update NHL Stats
 
-# Runs every 3 days at 02:00 AM Pacific (10:00 UTC).
-# Also triggerable manually from the Actions tab.
+# Manual-only. The scheduled run is now nightly-update.yml (midnight Pacific),
+# which runs rosters → NHL stats → standings in one go.
+# Use "Run workflow" in the Actions tab to run just this step on demand.
 on:
-  schedule:
-    - cron: '0 10 * * *'
   workflow_dispatch:
 
 permissions:
@@ -30,10 +29,10 @@ jobs:
         run: |
           git config user.name  'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          if git diff --quiet nhl_stats.js; then
+          git add nhl_stats.js nhl_stats_prev.js
+          if git diff --cached --quiet; then
             echo "nhl_stats.js unchanged - nothing to commit."
           else
-            git add nhl_stats.js
-            git commit -m "Auto-update NHL stats [$(date -u '+%Y-%m-%d')] - ${NHL_MATCHED}/${NHL_TOTAL} players"
+            git commit -m "Auto-update NHL stats [$(date -u '+%Y-%m-%d')] - NHL ${NHL_LABEL} ${NHL_MATCHED}/${NHL_TOTAL} players"
             git push
           fi

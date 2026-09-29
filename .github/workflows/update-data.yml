@@ -1,11 +1,9 @@
 name: Update RWHA Roster Data
 
-# Runs daily at 06:00 UTC (before the nightly NHL stats job).
-# Also triggerable manually from the Actions tab — run this after any trade
-# or roster move in STHS to keep data.js current.
+# Manual-only. The scheduled run is now nightly-update.yml (midnight Pacific),
+# which runs rosters → NHL stats → standings in one go.
+# Use "Run workflow" in the Actions tab to run just this step on demand.
 on:
-  schedule:
-    - cron: '0 6 * * *'
   workflow_dispatch:
 
 permissions:
@@ -23,9 +21,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Install dependencies
-        run: pip install beautifulsoup4
 
       - name: Scrape RWHA rosters and update data.js
         run: python .github/scripts/update_data.py

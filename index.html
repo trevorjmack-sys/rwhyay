@@ -420,17 +420,21 @@ tbody td.fant-col { background: var(--fant-zone); }
 
 <script src="data.js"></script>
 <script src="nhl_stats.js"></script>
-<script src="nhl_stats_2425.js"></script>
+<script src="nhl_stats_prev.js"></script>
 <script>
 'use strict';
 const D    = window.RWHA_DATA;
-const NS   = window.NHL_STATS      || {};   // 2025-26
-const NS24 = window.NHL_STATS_2425 || {};   // 2024-25
+const NS   = window.NHL_STATS      || {};   // current NHL season (nhl_stats.js)
+const NS24 = window.NHL_STATS_PREV || {};   // previous NHL season (nhl_stats_prev.js)
+const CUR_LBL  = window.NHL_SEASON_LABEL || '2026-27';
+const PREV_LBL = window.NHL_PREV_LABEL   || '2025-26';
+const COMB_LBL = PREV_LBL.slice(0, 4) + '-20' + CUR_LBL.slice(-2);
 const TEAMS = Object.keys(D).sort();
 
 // ── Season selector state ────────────────────────────────────────────────────
-// '2526' = current, '2425' = previous, 'comb' = combined 2024-2026
-let _season = '2526';
+// 'cur' = current, 'prev' = previous, 'comb' = combined.
+// Before the new NHL season has any games, default to last season's stats.
+let _season = Object.values(NS).some(v => v && v.gp) ? 'cur' : 'prev';
 let _currentTeam = null, _currentType = null;
 
 // ── League standings — FINAL 2025-26 (82 GP, sourced from rwha.net/Standing.php) ─
@@ -659,8 +663,8 @@ function nhlCombine(a, b) {
 
 function nhlLookup(nm) {
   const k = cleanNHLKey(nm);
-  if (_season === '2526') return NS[k]   || {};
-  if (_season === '2425') {
+  if (_season === 'cur') return NS[k]   || {};
+  if (_season === 'prev') {
     const cur = NS[k] || {};
     const prev = Object.assign({}, NS24[k] || {});
     if (cur.url) prev.url = cur.url;
@@ -675,9 +679,9 @@ function nhlLookup(nm) {
 }
 
 function nhlSeasonLabel() {
-  if (_season === '2526') return 'NHL 2025-26';
-  if (_season === '2425') return 'NHL 2024-25';
-  return 'NHL 2024-2026';
+  if (_season === 'cur')  return 'NHL ' + CUR_LBL;
+  if (_season === 'prev') return 'NHL ' + PREV_LBL;
+  return 'NHL ' + COMB_LBL;
 }
 
 function nameTags(nm, sp, ns) {
@@ -1019,9 +1023,9 @@ function renderRoster(team, type) {
     <div class="season-bar">
       <label for="season-sel">NHL Stats Season</label>
       <select class="season-sel" id="season-sel" onchange="changeSeason(this.value)">
-        <option value="2526"${_season === '2526' ? ' selected' : ''}>Current Season (2025-26)</option>
-        <option value="2425"${_season === '2425' ? ' selected' : ''}>Previous Season (2024-25)</option>
-        <option value="comb"${_season === 'comb' ? ' selected' : ''}>Combined Seasons (2024-2026)</option>
+        <option value="cur"${_season === 'cur' ? ' selected' : ''}>Current Season (${CUR_LBL})</option>
+        <option value="prev"${_season === 'prev' ? ' selected' : ''}>Previous Season (${PREV_LBL})</option>
+        <option value="comb"${_season === 'comb' ? ' selected' : ''}>Combined Seasons (${COMB_LBL})</option>
       </select>
     </div>
 
@@ -1087,7 +1091,7 @@ function renderSearch(query) {
           <tr class="grp">
             <th class="g-info" colspan="4"></th>
             <th class="g-info" colspan="1"></th>
-            <th class="g-nhl"  colspan="2">NHL 2025-26</th>
+            <th class="g-nhl"  colspan="2">${nhlSeasonLabel()}</th>
           </tr>
           <tr class="cols">
             <th class="left">Player</th>
@@ -1115,10 +1119,12 @@ function renderHome() {
       const confFull = st.conf === 'W' ? 'Wales' : 'Campbell';
       const curLabel = `${confFull} · ${ordinal(st.cur)}`;
       const isElim = pb === 'e';
+      const badge  = !st.rem && st.gp >= 82 ? 'FINAL'
+                   : (st.w !== undefined ? `${st.w}-${st.l}-${st.otl}` : `${st.gp} GP`);
       stdHtml = `
       <div class="card-standings">
         <div class="card-std-row">
-          <span class="card-std-badge ${isElim ? 'elim' : 'final'}">FINAL</span>
+          <span class="card-std-badge ${isElim ? 'elim' : 'final'}">${badge}</span>
           <span class="card-std-pts">${st.pts} pts</span>
           <span class="card-std-meta">${curLabel}</span>
         </div>
