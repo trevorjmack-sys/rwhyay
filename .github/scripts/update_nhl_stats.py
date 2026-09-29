@@ -5,7 +5,7 @@ update_nhl_stats.py
 Rebuild the NHL stats files for every player currently on an RWHA roster:
 
     nhl_stats.js       window.NHL_STATS       current NHL season
-    nhl_stats_prev.js  window.NHL_STATS_PREV  previous NHL season
+    nhl_stats_prev.js  window.NHL_STATS_PREV  previous two NHL seasons combined
 
 Player list comes from data.js (so traded / newly signed players are picked up
 automatically).  Stats come from NHL.com's public stats feed (no key needed):
@@ -25,6 +25,7 @@ import re
 import sys
 import time
 import unicodedata
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,9 +42,15 @@ API_BASE  = os.environ.get('NHL_API_BASE', 'https://api.nhle.com').rstrip('/')
 _now   = datetime.now(timezone.utc)
 _start = int(os.environ.get('NHL_SEASON_START') or (_now.year if _now.month >= 9 else _now.year - 1))
 SEASON      = f'{_start}{_start + 1}'
-PREV_SEASON = f'{_start - 1}{_start}'
 LABEL       = f'{_start}-{str(_start + 1)[-2:]}'
-PREV_LABEL  = f'{_start - 1}-{str(_start)[-2:]}'
+# "Combined Prev 2 Seasons": the two regular seasons before the current one,
+# aggregated by the NHL API (e.g. 2024-25 + 2025-26 while 2026-27 is current).
+COMB_FROM   = f'{_start - 2}{_start - 1}'
+COMB_TO     = f'{_start - 1}{_start}'
+PREV_LABEL  = f'{_start - 2}-{str(_start - 1)[-2:]} + {_start - 1}-{str(_start)[-2:]}'
+
+CUR_FILTER  = f'seasonId={SEASON} and gameTypeId=2'
+COMB_FILTER = f'seasonId>={COMB_FROM} and seasonId<={COMB_TO} and gameTypeId=2'
 
 # ── Nickname / spelling mappings (all lowercase) ──────────────────────────────
 LONG_TO_SHORT = {
@@ -106,13 +113,20 @@ def fetch_json(url: str, retries: int = 3) -> dict:
             time.sleep(3 * attempt)
 
 
-def fetch_bulk(kind: str, season: str) -> list:
+def fetch_bulk(kind: str, cayenne: str, aggregate: bool) -> list:
+    """Page through the NHL stats summary for skaters or goalies.
+
+    aggregate=True sums multiple seasons into one row per player (the NHL API
+    also recomputes GAA / SV% correctly across seasons).  Sorting by playerId
+    keeps pagination stable so no player is skipped or repeated.
+    """
     rows, start = [], 0
-    sort = 'points' if kind == 'skater' else 'wins'
+    sort = urllib.parse.quote('[{"property":"playerId","direction":"ASC"}]')
+    exp = urllib.parse.quote(cayenne)
     while True:
         url = (f'{API_BASE}/stats/rest/en/{kind}/summary'
-               f'?limit=100&start={start}&sort={sort}&direction=DESC'
-               f'&cayenneExp=seasonId%3D{season}%20and%20gameTypeId%3D2')
+               f'?isAggregate={"true" if aggregate else "false"}&isGame=false'
+               f'&limit=100&start={start}&sort={sort}&cayenneExp={exp}')
         data = fetch_json(url)
         batch = data.get('data', [])
         rows.extend(batch)
@@ -121,7 +135,7 @@ def fetch_bulk(kind: str, season: str) -> list:
             break
         start += 100
         time.sleep(0.4)
-    print(f'  [{season} {kind}] {len(rows)} rows', flush=True)
+    print(f'  [{cayenne} | {kind}] {len(rows)} rows', flush=True)
     return rows
 
 
@@ -161,11 +175,11 @@ def goalie_entry(r: dict) -> dict:
     }
 
 
-def build_index(season: str):
+def build_index(cayenne: str, aggregate: bool):
     by_name, by_id = {}, {}
     for kind, name_key, make in (('skater', 'skaterFullName', skater_entry),
                                  ('goalie', 'goalieFullName', goalie_entry)):
-        for r in fetch_bulk(kind, season):
+        for r in fetch_bulk(kind, cayenne, aggregate):
             e = make(r)
             by_name.setdefault(normalize(r.get(name_key, '')), e)
             if e['id']:
@@ -206,8 +220,8 @@ def write_file(path: Path, var: str, stats: dict, labels: dict) -> None:
     path.write_text(f'window.{var} = {body};\n{extra}', encoding='utf-8')
 
 
-def run_season(season: str, players: list):
-    by_name, by_id = build_index(season)
+def run_season(cayenne: str, aggregate: bool, players: list):
+    by_name, by_id = build_index(cayenne, aggregate)
     stats, matched, missing = {}, 0, []
     for p in players:
         e = match(p, by_name, by_id)
@@ -226,15 +240,15 @@ def main() -> None:
         print('ERROR: data.js not found — run from repo root', file=sys.stderr)
         sys.exit(1)
     players = load_players()
-    print(f'NHL season {LABEL} (previous {PREV_LABEL}); {len(players)} RWHA players\n', flush=True)
+    print(f'NHL current season {LABEL}; combined {PREV_LABEL}; {len(players)} RWHA players\n', flush=True)
 
     labels = {'NHL_SEASON_LABEL': LABEL, 'NHL_PREV_LABEL': PREV_LABEL}
 
-    cur, cur_m, cur_miss, cur_n = run_season(SEASON, players)
-    prev, prev_m, _, prev_n = run_season(PREV_SEASON, players)
+    cur, cur_m, cur_miss, cur_n = run_season(CUR_FILTER, False, players)
+    prev, prev_m, _, prev_n = run_season(COMB_FILTER, True, players)
 
     if prev_n == 0:
-        print('ERROR: NHL API returned no data for the previous season — not writing files',
+        print('ERROR: NHL API returned no data for the combined previous seasons — not writing files',
               file=sys.stderr)
         sys.exit(1)
 
