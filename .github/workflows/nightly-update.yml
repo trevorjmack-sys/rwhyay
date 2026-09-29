@@ -55,9 +55,14 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         run: python .github/scripts/update_nhl_stats.py
 
+      # Standings are a nice-to-have: if rwha.net times out here, still save
+      # the rosters and NHL stats (the run shows a warning instead of failing).
       - name: Update standings from rwha.net (index.html)
         if: steps.gate.outputs.run == 'true'
-        run: python .github/scripts/update_standings.py
+        continue-on-error: true
+        run: |
+          sleep 20   # give rwha.net a breather after the roster step
+          python .github/scripts/update_standings.py
 
       - name: Commit and push if anything changed
         if: steps.gate.outputs.run == 'true'

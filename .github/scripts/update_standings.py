@@ -25,6 +25,7 @@ import os
 import re
 import ssl
 import sys
+import time
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,11 +41,24 @@ _SSL_CTX.check_hostname = False
 _SSL_CTX.verify_mode = ssl.CERT_NONE
 
 
-def fetch_json(path: str):
-    req = urllib.request.Request(f'{BASE_URL}{path}',
-                                 headers={'User-Agent': 'Mozilla/5.0 (rwha-stats-site)'})
-    with urllib.request.urlopen(req, timeout=30, context=_SSL_CTX) as r:
-        return json.loads(r.read().decode('utf-8', errors='replace'))
+def fetch_json(path: str, retries: int = 4):
+    """GET a rwha.net JSON endpoint, retrying on timeouts / connection errors.
+
+    rwha.net is a small server and occasionally stalls (e.g. right after the
+    roster step's burst of requests), so wait and retry before giving up.
+    """
+    url = f'{BASE_URL}{path}'
+    for attempt in range(1, retries + 1):
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (rwha-stats-site)'})
+            with urllib.request.urlopen(req, timeout=60, context=_SSL_CTX) as r:
+                return json.loads(r.read().decode('utf-8', errors='replace'))
+        except Exception as e:  # noqa: BLE001
+            if attempt == retries:
+                raise
+            wait = 15 * attempt
+            print(f'  {path}: {e} — retry {attempt}/{retries - 1} in {wait}s', flush=True)
+            time.sleep(wait)
 
 
 def load_team_ov() -> dict:
