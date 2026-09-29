@@ -2,7 +2,18 @@
 """
 update_nhl_stats.py
 ───────────────────
-Auto-update nhl_stats.js with current-season NHL data.
+Rebuild the NHL stats files for every player currently on an RWHA roster:
+
+    nhl_stats.js       window.NHL_STATS       current NHL season
+    nhl_stats_prev.js  window.NHL_STATS_PREV  previous NHL season
+
+Player list comes from data.js (so traded / newly signed players are picked up
+automatically).  Stats come from NHL.com's public stats feed (no key needed):
+a handful of bulk requests per season instead of one request per player.
+
+Matching: by name (accent-insensitive, with common nickname variants), then by
+the NHL id rwha.net publishes for some players (accepted only when the last
+name also matches, since a few ids on rwha.net are placeholders).
 
 Run from the repository root (done automatically by GitHub Actions).
 Uses only Python stdlib — no pip installs required.
@@ -15,248 +26,235 @@ import sys
 import time
 import unicodedata
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
-# ── Current season (auto-detected) ───────────────────────────────────────────
-# NHL regular season runs Oct–Jun; before October = we're still in last season.
-_now = datetime.utcnow()
-_start = _now.year if _now.month >= 10 else _now.year - 1
-SEASON = f'{_start}{_start + 1}'
+DATA_FILE = Path('data.js')
+CUR_FILE  = Path('nhl_stats.js')
+PREV_FILE = Path('nhl_stats_prev.js')
+API_BASE  = os.environ.get('NHL_API_BASE', 'https://api.nhle.com').rstrip('/')
 
-STATS_FILE = Path('nhl_stats.js')   # relative to repo root (CWD in Actions)
+# ── Seasons ───────────────────────────────────────────────────────────────────
+# Switch to the new season on September 1 (training camp / preseason).  Until
+# the first regular-season game, the current file is empty and the site
+# defaults to showing the previous season.
+_now   = datetime.now(timezone.utc)
+_start = int(os.environ.get('NHL_SEASON_START') or (_now.year if _now.month >= 9 else _now.year - 1))
+SEASON      = f'{_start}{_start + 1}'
+PREV_SEASON = f'{_start - 1}{_start}'
+LABEL       = f'{_start}-{str(_start + 1)[-2:]}'
+PREV_LABEL  = f'{_start - 1}-{str(_start)[-2:]}'
 
-print(f"NHL season: {SEASON}  ({_start}–{_start+1})", flush=True)
-
-# ── Nickname / spelling mappings ──────────────────────────────────────────────
-# Long/legal form → common NHL display name  (all lowercase)
-LONG_TO_SHORT: dict[str, str] = {
-    'aleksander': 'alex',
-    'alexander':  'alex',
-    'alexis':     'alex',
-    'andrei':     'andrei',     # keep — some are Andrei, some Andrey
-    'artem':      'artemi',     # Artem → Artemi (Panarin)
-    'cameron':    'cam',
-    'christopher':'chris',
-    'daniel':     'dan',
-    'dmitri':     'dmitry',
-    'egor':       'yegor',      # RWHA "Egor" ↔ NHL "Yegor"
-    'evgeni':     'evgeny',
-    'jacob':      'jake',
-    'james':      'jim',
-    'jonathan':   'jon',
-    'konstantin': 'kosta',
-    'mathew':     'matt',
-    'matthew':    'matt',
-    'maximilian': 'max',
-    'michael':    'mike',
-    'mikhail':    'mike',
-    'mitchell':   'mitch',
-    'nicholas':   'nick',
-    'nicolas':    'nick',
-    'nikolaj':    'nick',
-    'nikolai':    'nick',
-    'patrick':    'pat',
-    'richard':    'rick',
-    'robert':     'rob',
-    'samuel':     'sam',
-    'thomas':     'tom',
-    'timothy':    'tim',
-    'william':    'will',
-    'yevgeni':    'evgeny',
-    'zachary':    'zach',
+# ── Nickname / spelling mappings (all lowercase) ──────────────────────────────
+LONG_TO_SHORT = {
+    'aleksander': 'alex', 'alexander': 'alex', 'alexis': 'alex',
+    'artem': 'artemi', 'cameron': 'cam', 'christopher': 'chris',
+    'daniel': 'dan', 'dmitri': 'dmitry', 'egor': 'yegor', 'evgeni': 'evgeny',
+    'jacob': 'jake', 'james': 'jim', 'jonathan': 'jon', 'konstantin': 'kosta',
+    'mathew': 'matt', 'matthew': 'matt', 'maximilian': 'max',
+    'michael': 'mike', 'mikhail': 'mike', 'mitchell': 'mitch',
+    'nicholas': 'nick', 'nicolas': 'nick', 'nikolaj': 'nick', 'nikolai': 'nick',
+    'patrick': 'pat', 'richard': 'rick', 'robert': 'rob', 'samuel': 'sam',
+    'thomas': 'tom', 'timothy': 'tim', 'william': 'will', 'yevgeni': 'evgeny',
+    'zachary': 'zach',
 }
-
-# Build reverse: short → [legal long forms]
-SHORT_TO_LONG: dict[str, list[str]] = {}
-for _long, _short in LONG_TO_SHORT.items():
-    SHORT_TO_LONG.setdefault(_short, []).append(_long)
+SHORT_TO_LONG: dict = {}
+for _l, _s in LONG_TO_SHORT.items():
+    SHORT_TO_LONG.setdefault(_s, []).append(_l)
 
 
 def normalize(name: str) -> str:
-    """Remove accents, lowercase, strip punctuation, collapse spaces."""
-    name = unicodedata.normalize('NFD', name)
+    name = unicodedata.normalize('NFD', name or '')
     name = ''.join(c for c in name if unicodedata.category(c) != 'Mn')
-    name = re.sub(r"[^a-z ]", '', name.lower())
+    name = re.sub(r'[^a-z ]', '', name.lower().replace('-', ' '))
     return re.sub(r'\s+', ' ', name).strip()
 
 
-def name_variants(name: str) -> list[str]:
-    """Return all plausible normalized variants of a player name."""
+def name_variants(name: str) -> list:
     base = normalize(name)
     parts = base.split()
     if not parts:
         return [base]
     first, rest = parts[0], parts[1:]
-    variants: set[str] = {base}
-
-    # Long → short  (Mitchell → Mitch)
+    out = {base}
     if first in LONG_TO_SHORT:
-        variants.add(' '.join([LONG_TO_SHORT[first]] + rest))
+        out.add(' '.join([LONG_TO_SHORT[first]] + rest))
+    for lf in SHORT_TO_LONG.get(first, []):
+        out.add(' '.join([lf] + rest))
+    # also try the canonical short form of any long form (Mikhail ↔ Michael)
+    if first in LONG_TO_SHORT:
+        for lf in SHORT_TO_LONG.get(LONG_TO_SHORT[first], []):
+            out.add(' '.join([lf] + rest))
+    return list(out)
 
-    # Short → long  (Matt → Matthew / Mathew)
-    if first in SHORT_TO_LONG:
-        for long_form in SHORT_TO_LONG[first]:
-            variants.add(' '.join([long_form] + rest))
 
-    return list(variants)
-
-
-def clean_rwha_key(name: str) -> str:
-    """Strip RWHA captain/rookie annotations: (R), (C), (A)."""
+def clean_key(name: str) -> str:
     return re.sub(r'\s*\([RCA]\)', '', name).strip()
 
 
-# ── NHL API helpers ───────────────────────────────────────────────────────────
-def fetch_json(url: str) -> dict:
-    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.loads(r.read())
+# ── NHL API ───────────────────────────────────────────────────────────────────
+def fetch_json(url: str, retries: int = 3) -> dict:
+    for attempt in range(1, retries + 1):
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (rwha-stats-site)'})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return json.loads(r.read())
+        except Exception as e:  # noqa: BLE001
+            if attempt == retries:
+                raise
+            print(f'  retry {attempt}: {e}', flush=True)
+            time.sleep(3 * attempt)
 
 
-def fetch_bulk(kind: str) -> list:
-    """Paginate NHL stats API, returning all rows for 'skater' or 'goalie'."""
-    rows: list = []
-    start = 0
+def fetch_bulk(kind: str, season: str) -> list:
+    rows, start = [], 0
     sort = 'points' if kind == 'skater' else 'wins'
     while True:
-        url = (
-            f'https://api.nhle.com/stats/rest/en/{kind}/summary'
-            f'?limit=100&start={start}&sort={sort}&direction=DESC'
-            f'&cayenneExp=seasonId%3D{SEASON}%20and%20gameTypeId%3D2'
-        )
+        url = (f'{API_BASE}/stats/rest/en/{kind}/summary'
+               f'?limit=100&start={start}&sort={sort}&direction=DESC'
+               f'&cayenneExp=seasonId%3D{season}%20and%20gameTypeId%3D2')
         data = fetch_json(url)
         batch = data.get('data', [])
         rows.extend(batch)
         total = data.get('total', len(rows))
-        print(f"  [{kind}] {len(rows)}/{total}", flush=True)
         if len(rows) >= total or not batch:
             break
         start += 100
         time.sleep(0.4)
+    print(f'  [{season} {kind}] {len(rows)} rows', flush=True)
     return rows
 
 
-# ── Build name → stats lookups ────────────────────────────────────────────────
-def nhl_url(player_id: int, full_name: str) -> str:
-    """Build an NHL.com player profile URL from ID and full name."""
-    slug = re.sub(r'\s+', '-', normalize(full_name))   # accent-stripped, hyphenated
-    return f'https://www.nhl.com/player/{slug}-{player_id}'
+def v(x) -> str:
+    return '' if x is None else str(x)
 
 
-def build_skater_lookup(rows: list) -> dict:
-    lookup: dict = {}
-    for r in rows:
-        name = normalize(r.get('skaterFullName', ''))
-        if not name:
-            continue
-        player_id = r.get('playerId')
-        lookup[name] = {
-            'gp':  str(r.get('gamesPlayed',    '') or ''),
-            'g':   str(r.get('goals',          '') or ''),
-            'a':   str(r.get('assists',        '') or ''),
-            'pts': str(r.get('points',         '') or ''),
-            'pm':  str(r.get('plusMinus',      '') or ''),
-            'pim': str(r.get('penaltyMinutes', '') or ''),
-            'sog': str(r.get('shots',          '') or ''),
-            'id':  player_id,
-            'pos': r.get('positionCode', ''),
-            'url': nhl_url(player_id, r.get('skaterFullName', '')) if player_id else '',
-        }
-    return lookup
+def nhl_url(pid, full_name: str) -> str:
+    return f'https://www.nhl.com/player/{normalize(full_name).replace(" ", "-")}-{pid}'
 
 
-def build_goalie_lookup(rows: list) -> dict:
-    lookup: dict = {}
-    for r in rows:
-        name = normalize(r.get('goalieFullName', ''))
-        if not name:
-            continue
-        player_id = r.get('playerId')
-        gaa = float(r.get('goalsAgainstAverage', 0) or 0)
-        svp = float(r.get('savePct',              0) or 0)
-        lookup[name] = {
-            'gp':  str(r.get('gamesPlayed', '') or ''),
-            'w':   str(r.get('wins',        '') or ''),
-            'l':   str(r.get('losses',      '') or ''),
-            'ot':  str(r.get('otLosses',    '') or ''),
-            'gaa': f'{gaa:.2f}',
-            'svp': f'{svp:.3f}'.lstrip('0') or '.000',
-            'so':  str(r.get('shutouts',    '') or ''),
-            'id':  player_id,
-            'pos': 'G',
-            'url': nhl_url(player_id, r.get('goalieFullName', '')) if player_id else '',
-        }
-    return lookup
+def skater_entry(r: dict) -> dict:
+    pid = r.get('playerId')
+    return {
+        'gp':  v(r.get('gamesPlayed')), 'g': v(r.get('goals')),
+        'a':   v(r.get('assists')),     'pts': v(r.get('points')),
+        'pm':  v(r.get('plusMinus')),   'pim': v(r.get('penaltyMinutes')),
+        'sog': v(r.get('shots')),
+        'id': pid, 'pos': r.get('positionCode', ''),
+        'url': nhl_url(pid, r.get('skaterFullName', '')) if pid else '',
+        '_last': normalize(r.get('lastName', '') or r.get('skaterFullName', '').split(' ')[-1]),
+    }
 
 
-def match_player(name: str, skaters: dict, goalies: dict):
-    """Try all name variants against both lookups. Returns stats dict or None."""
-    for variant in name_variants(name):
-        if variant in skaters:
-            return skaters[variant]
-        if variant in goalies:
-            return goalies[variant]
+def goalie_entry(r: dict) -> dict:
+    pid = r.get('playerId')
+    gaa = float(r.get('goalsAgainstAverage') or 0)
+    svp = float(r.get('savePct') or 0)
+    return {
+        'gp': v(r.get('gamesPlayed')), 'w': v(r.get('wins')),
+        'l':  v(r.get('losses')),      'ot': v(r.get('otLosses')),
+        'gaa': f'{gaa:.2f}', 'svp': f'{svp:.3f}'.lstrip('0') or '.000',
+        'so': v(r.get('shutouts')),
+        'id': pid, 'pos': 'G',
+        'url': nhl_url(pid, r.get('goalieFullName', '')) if pid else '',
+        '_last': normalize(r.get('lastName', '') or r.get('goalieFullName', '').split(' ')[-1]),
+    }
+
+
+def build_index(season: str):
+    by_name, by_id = {}, {}
+    for kind, name_key, make in (('skater', 'skaterFullName', skater_entry),
+                                 ('goalie', 'goalieFullName', goalie_entry)):
+        for r in fetch_bulk(kind, season):
+            e = make(r)
+            by_name.setdefault(normalize(r.get(name_key, '')), e)
+            if e['id']:
+                by_id[str(e['id'])] = e
+    return by_name, by_id
+
+
+def match(player: dict, by_name: dict, by_id: dict):
+    name = clean_key(player['nm'])
+    for v in name_variants(name):
+        if v in by_name:
+            return by_name[v]
+    nid = player.get('nid') or ''
+    if nid and nid in by_id:
+        last = normalize(name).split(' ')[-1] if name else ''
+        if by_id[nid]['_last'] and by_id[nid]['_last'].split(' ')[-1] == last:
+            return by_id[nid]
     return None
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
-def main() -> None:
-    if not STATS_FILE.exists():
-        print(f'ERROR: {STATS_FILE} not found — run from repo root', file=sys.stderr)
-        sys.exit(1)
+def load_players() -> list:
+    raw = DATA_FILE.read_text(encoding='utf-8')
+    data = json.loads(raw.split('=', 1)[1].strip().rstrip(';').strip())
+    seen, out = set(), []
+    for team in data.values():
+        for grp in ('ps', 'pg', 'fs', 'fg'):
+            for p in team.get(grp, []):
+                k = clean_key(p['nm'])
+                if k not in seen:
+                    seen.add(k)
+                    out.append(p)
+    return out
 
-    # Parse existing nhl_stats.js  (format: window.NHL_STATS = {...};)
-    raw = STATS_FILE.read_text(encoding='utf-8').strip()
-    json_str = raw.split('=', 1)[1].strip().rstrip(';').strip()
-    stats: dict = json.loads(json_str)
-    print(f'Loaded {len(stats)} RWHA player keys from nhl_stats.js\n')
 
-    # Fetch bulk stats from NHL API
-    print(f'Fetching skater stats…')
-    skater_rows = fetch_bulk('skater')
-    print(f'\nFetching goalie stats…')
-    goalie_rows  = fetch_bulk('goalie')
+def write_file(path: Path, var: str, stats: dict, labels: dict) -> None:
+    body = json.dumps(stats, ensure_ascii=False, separators=(',', ':'))
+    extra = ''.join(f'window.{k} = {json.dumps(v)};\n' for k, v in labels.items())
+    path.write_text(f'window.{var} = {body};\n{extra}', encoding='utf-8')
 
-    skater_lookup = build_skater_lookup(skater_rows)
-    goalie_lookup  = build_goalie_lookup(goalie_rows)
-    print(f'\nNHL index: {len(skater_lookup)} skaters, {len(goalie_lookup)} goalies\n')
 
-    # Match each RWHA player to NHL stats
-    matched: int = 0
-    unmatched: list[str] = []
-
-    for key in stats:
-        clean = clean_rwha_key(key)
-        result = match_player(clean, skater_lookup, goalie_lookup)
-        if result is not None:
-            stats[key] = result
+def run_season(season: str, players: list):
+    by_name, by_id = build_index(season)
+    stats, matched, missing = {}, 0, []
+    for p in players:
+        e = match(p, by_name, by_id)
+        key = clean_key(p['nm'])
+        if e:
+            stats[key] = {k: v for k, v in e.items() if not k.startswith('_')}
             matched += 1
         else:
-            stats[key] = {}   # retired / AHL / injured / no NHL stats this season
-            unmatched.append(clean)
+            stats[key] = {}
+            missing.append(key)
+    return stats, matched, missing, len(by_name)
 
-    print(f'Matched: {matched}/{len(stats)}')
-    if unmatched:
-        print(f'No NHL stats found for {len(unmatched)} players'
-              ' (retired / AHL / injured — stored as empty):')
-        for name in sorted(unmatched):
-            print(f'  – {name}')
 
-    # Write updated file
-    updated_json = json.dumps(stats, ensure_ascii=False, separators=(',', ':'))
-    STATS_FILE.write_text(f'window.NHL_STATS = {updated_json};\n', encoding='utf-8')
-    size_kb = STATS_FILE.stat().st_size / 1024
-    print(f'\n✓ nhl_stats.js written  ({size_kb:.1f} KB,  {matched} players with stats)')
+def main() -> None:
+    if not DATA_FILE.exists():
+        print('ERROR: data.js not found — run from repo root', file=sys.stderr)
+        sys.exit(1)
+    players = load_players()
+    print(f'NHL season {LABEL} (previous {PREV_LABEL}); {len(players)} RWHA players\n', flush=True)
 
-    # Export counts to GitHub Actions environment so the commit step can read them
+    labels = {'NHL_SEASON_LABEL': LABEL, 'NHL_PREV_LABEL': PREV_LABEL}
+
+    cur, cur_m, cur_miss, cur_n = run_season(SEASON, players)
+    prev, prev_m, _, prev_n = run_season(PREV_SEASON, players)
+
+    if prev_n == 0:
+        print('ERROR: NHL API returned no data for the previous season — not writing files',
+              file=sys.stderr)
+        sys.exit(1)
+
+    write_file(CUR_FILE, 'NHL_STATS', cur, labels)
+    write_file(PREV_FILE, 'NHL_STATS_PREV', prev, labels)
+
+    print(f'\n{LABEL}: matched {cur_m}/{len(players)}'
+          + ('  (season not started yet — no games in the NHL feed)' if cur_n == 0 else ''))
+    print(f'{PREV_LABEL}: matched {prev_m}/{len(players)}')
+    if cur_n and cur_miss:
+        print(f'\nNo {LABEL} NHL stats for {len(cur_miss)} players (AHL / junior / Europe / injured / name mismatch):')
+        for n in sorted(cur_miss):
+            print(f'  – {n}')
+
     github_env = os.environ.get('GITHUB_ENV')
     if github_env:
         with open(github_env, 'a') as f:
-            f.write(f'NHL_MATCHED={matched}\n')
-            f.write(f'NHL_TOTAL={len(stats)}\n')
-
-    sys.exit(0)
+            f.write(f'NHL_MATCHED={cur_m if cur_n else prev_m}\n')
+            f.write(f'NHL_TOTAL={len(players)}\n')
+            f.write(f'NHL_LABEL={LABEL if cur_n else PREV_LABEL}\n')
 
 
 if __name__ == '__main__':

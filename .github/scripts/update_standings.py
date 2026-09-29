@@ -2,18 +2,21 @@
 """
 update_standings.py
 ───────────────────
-Auto-update the STANDINGS constant in index.html with projected RWHA standings.
+Auto-update the STANDINGS constant in index.html with current + projected
+RWHA standings.
+
+Data sources (rwha.net JSON endpoints used by the redesigned 2026-27 site):
+    /auth/league.php    → teams, conference, division, current record & points
+    /auth/schedule.php  → every game, played/unplayed (for remaining schedule)
+    data.js             → team Pro OV (po) for the projection model
 
 Projection model
-  - Scrapes http://www.rwha.net/Schedule.php for W-L-OTL records + remaining opponents
-  - Reads team Pro OV ratings from data.js (window.RWHA_DATA)
   - Win probability: logistic function on OV differential (k = 0.20)
-  - OT rate calibrated from actual played games this season
-  - Expected pts per game = 2·p(win) + ot_rate·(1−p(win))
+  - OT rate calibrated from games played so far this season
+  - Expected pts per remaining game = 2·p(win) + ot_rate·(1−p(win))
 
 Run from the repository root (done automatically by GitHub Actions).
 Uses only Python stdlib — no pip installs required.
-rwha.net has an expired SSL cert; we disable verification intentionally.
 """
 
 import json
@@ -23,186 +26,109 @@ import re
 import ssl
 import sys
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
-# ── Files (relative to repo root) ─────────────────────────────────────────────
 INDEX_FILE = Path('index.html')
 DATA_FILE  = Path('data.js')
+BASE_URL   = os.environ.get('RWHA_BASE_URL', 'http://www.rwha.net').rstrip('/')
 
-# ── Conference assignments ─────────────────────────────────────────────────────
-WALES_TEAMS = {
-    'Gladiators', 'Warheads', 'Bunnies', 'Fletushkas', 'Clan',
-    'Flyers', 'Jets', 'Giants', 'Mongoloids', 'Riots', 'Aces',
-}
-CAMPBELL_TEAMS = {
-    'Oilers', 'Shitbirds', 'Phantoms', 'Meltdown', 'Steamers',
-    'Mariners', 'Snowdogs', 'Marauders', 'WaffleBots', 'Cunts', 'Chiefs',
-}
-ALL_TEAMS = WALES_TEAMS | CAMPBELL_TEAMS
+K = 0.20   # 3 OV advantage ≈ 60% win probability
 
-# ── Model hyperparameter ───────────────────────────────────────────────────────
-# k=0.20 → a 3 OV advantage gives ~60% win probability
-K = 0.20
-
-# ── SSL context (rwha.net has an expired cert — bypass intentionally) ──────────
 _SSL_CTX = ssl.create_default_context()
 _SSL_CTX.check_hostname = False
 _SSL_CTX.verify_mode = ssl.CERT_NONE
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-def fetch(url: str) -> str:
-    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+def fetch_json(path: str):
+    req = urllib.request.Request(f'{BASE_URL}{path}',
+                                 headers={'User-Agent': 'Mozilla/5.0 (rwha-stats-site)'})
     with urllib.request.urlopen(req, timeout=30, context=_SSL_CTX) as r:
-        return r.read().decode('utf-8', errors='replace')
+        return json.loads(r.read().decode('utf-8', errors='replace'))
 
 
 def load_team_ov() -> dict:
-    """Extract Pro OV (po) per team from data.js (window.RWHA_DATA = {...})."""
     raw = DATA_FILE.read_text(encoding='utf-8')
-    json_str = raw.split('=', 1)[1].strip().rstrip(';').strip()
-    data = json.loads(json_str)
+    data = json.loads(raw.split('=', 1)[1].strip().rstrip(';').strip())
     ov = {}
     for team, d in data.items():
-        if team in ALL_TEAMS:
-            ov[team] = int(d.get('po', 78))
+        try:
+            ov[team] = int(d.get('po') or 78)
+        except ValueError:
+            ov[team] = 78
     return ov
 
 
-def parse_schedule(html: str):
-    """Parse Schedule.php HTML into played / unplayed game lists."""
-    row_re = re.compile(
-        r'<tr><td>(\d+)[^<]*</td><td>(\d+)</td>'
-        r'<td[^>]*>.*?href="[^"]*">([^<]+)</a></td>'
-        r'<td>([^<]*)</td>'
-        r'<td[^>]*>.*?href="[^"]*">([^<]+)</a></td>'
-        r'<td>([^<]*)</td>'
-        r'(.*?)(?=</tr>)',
-        re.DOTALL,
-    )
-    played, unplayed = [], []
-    for m in row_re.finditer(html):
-        _, _, vis, vs, home, hs, rest = m.groups()
-        vis = vis.strip(); home = home.strip()
-        vs  = vs.strip();  hs   = hs.strip()
-        if vs == '-' or hs == '-':
-            unplayed.append({'vis': vis, 'home': home})
-        else:
-            try:
-                vs_i, hs_i = int(vs), int(hs)
-            except ValueError:
-                continue
-            ot = bool(rest and 'X' in rest)
-            played.append({'vis': vis, 'home': home, 'vs': vs_i, 'hs': hs_i, 'ot': ot})
-    return played, unplayed
+def build(league: dict, schedule: dict, team_ov: dict):
+    by_num = {t['number']: t for t in league['teams']}
+    teams  = {t['name']: t for t in league['teams']}
 
+    games    = schedule.get('games') or []
+    played   = [g for g in games if g.get('played')]
+    unplayed = [g for g in games if not g.get('played')]
+    ot_games = sum(1 for g in played if g.get('overtime') or g.get('shootout'))
+    ot_rate  = ot_games / len(played) if played else 0.184
 
-def build_standings(played: list, unplayed: list, team_ov: dict):
-    """
-    Derive current W-L-OTL records and project final-season points.
-
-    Returns:
-        record    – {team: {w, l, otl, pts, gp}}
-        rem_games – {team: [opponent, ...]}
-        proj_pts  – {team: float}
-        ot_rate   – float
-    """
-    record = {t: {'w': 0, 'l': 0, 'otl': 0, 'pts': 0, 'gp': 0} for t in ALL_TEAMS}
-    ot_count = 0
-
-    for g in played:
-        v, h = g['vis'], g['home']
-        if v not in record or h not in record:
-            continue
-        ot = g['ot']
-        if ot:
-            ot_count += 1
-        record[v]['gp'] += 1
-        record[h]['gp'] += 1
-        if g['hs'] > g['vs']:          # home win
-            record[h]['w']   += 1;  record[h]['pts'] += 2
-            if ot: record[v]['otl'] += 1; record[v]['pts'] += 1
-            else:  record[v]['l']   += 1
-        else:                           # visitor win
-            record[v]['w']   += 1;  record[v]['pts'] += 2
-            if ot: record[h]['otl'] += 1; record[h]['pts'] += 1
-            else:  record[h]['l']   += 1
-
-    ot_rate = ot_count / len(played) if played else 0.184
-
-    # Build remaining-opponent lists
-    rem_games = {t: [] for t in ALL_TEAMS}
+    rem = {n: [] for n in teams}
     for g in unplayed:
-        v, h = g['vis'], g['home']
-        if v in rem_games: rem_games[v].append(h)
-        if h in rem_games: rem_games[h].append(v)
+        h, v = by_num.get(g['home_team']), by_num.get(g['visitor_team'])
+        if h and v:
+            rem[h['name']].append(v['name'])
+            rem[v['name']].append(h['name'])
 
-    # Project final points
-    proj_pts = {}
-    for t in ALL_TEAMS:
-        ov_t = team_ov.get(t, 78)
+    proj = {}
+    for n, t in teams.items():
+        ov_t = team_ov.get(n, 78)
         add = 0.0
-        for opp in rem_games[t]:
-            ov_opp = team_ov.get(opp, 78)
-            p = 1.0 / (1.0 + math.exp(-K * (ov_t - ov_opp)))
+        for opp in rem[n]:
+            p = 1.0 / (1.0 + math.exp(-K * (ov_t - team_ov.get(opp, 78))))
             add += 2 * p + ot_rate * (1 - p)
-        proj_pts[t] = record[t]['pts'] + add
-
-    return record, rem_games, proj_pts, ot_rate
-
-
-def conf_ranks(teams: set, key_fn) -> dict:
-    return {t: i + 1 for i, t in enumerate(sorted(teams, key=key_fn))}
+        proj[n] = (t['record'].get('pts') or 0) + add
+    return teams, rem, proj, ot_rate
 
 
-def format_standings_js(record: dict, rem_games: dict, proj_pts: dict,
-                         ot_rate: float, today: str) -> str:
-    """Render the STANDINGS JS block that replaces the one in index.html."""
-    # Current ranks: primary sort = pts desc, secondary = wins desc (tiebreaker)
-    cur_rank_W  = conf_ranks(WALES_TEAMS,    lambda t: (-record[t]['pts'], -record[t]['w']))
-    cur_rank_C  = conf_ranks(CAMPBELL_TEAMS, lambda t: (-record[t]['pts'], -record[t]['w']))
-    # Projected ranks: sort by projected pts desc
-    proj_rank_W = conf_ranks(WALES_TEAMS,    lambda t: -proj_pts[t])
-    proj_rank_C = conf_ranks(CAMPBELL_TEAMS, lambda t: -proj_pts[t])
+def format_block(teams, rem, proj, ot_rate, today) -> str:
+    def rec(n):
+        return teams[n]['record']
 
-    wales_sorted    = sorted(WALES_TEAMS,    key=lambda t: cur_rank_W[t])
-    campbell_sorted = sorted(CAMPBELL_TEAMS, key=lambda t: cur_rank_C[t])
+    def wins(n):   # regulation + OT + shootout wins
+        r = rec(n)
+        return (r.get('w') or 0) + (r.get('otw') or 0) + (r.get('sow') or 0)
 
-    gp_played = sum(r['gp'] for r in record.values()) // len(record) if record else 0
+    confs = {}
+    for n, t in teams.items():
+        confs.setdefault(t['conference'], []).append(n)
 
     lines = [
-        f'// ── League standings (scraped {today}, ~{gp_played} GP played, 82 GP season) ──────',
+        f'// ── League standings (scraped {today} from rwha.net) ──────',
         '// Projection model: remaining schedule × team OV win-probability (logistic, k=0.20)',
         f'// OT rate this season: {ot_rate:.3f}',
         '// cur = current conf rank, pts = current points, pct = points pct,',
         '// rem = games remaining, proj = projected final pts, projPos = projected conf rank',
         'const STANDINGS = {',
-        '  // Wales Conference  (cur = current rank by pts; projPos = projected rank by model)',
     ]
-
-    def row(t: str, conf: str) -> str:
-        r = record[t]
-        pct = round(r['pts'] / (r['gp'] * 2), 3) if r['gp'] else 0
-        cur_r  = cur_rank_W[t]  if conf == 'W' else cur_rank_C[t]
-        proj_r = proj_rank_W[t] if conf == 'W' else proj_rank_C[t]
-        return (
-            f"  '{t}': {{ conf:'{conf}', cur:{cur_r},  pts:{r['pts']}, "
-            f"gp:{r['gp']}, pct:{pct}, rem:{len(rem_games[t])}, "
-            f"proj:{round(proj_pts[t])}, projPos:{proj_r}  }},"
-        )
-
-    for t in wales_sorted:
-        lines.append(row(t, 'W'))
-    lines.append('  // Campbell Conference')
-    for t in campbell_sorted:
-        lines.append(row(t, 'C'))
+    for conf in sorted(confs, key=lambda c: (c != 'Wales', c)):
+        members = confs[conf]
+        cur_sorted  = sorted(members, key=lambda n: (-(rec(n).get('pts') or 0), -wins(n), n))
+        proj_sorted = sorted(members, key=lambda n: -proj[n])
+        proj_rank   = {n: i + 1 for i, n in enumerate(proj_sorted)}
+        lines.append(f'  // {conf} Conference')
+        for i, n in enumerate(cur_sorted, 1):
+            r = rec(n)
+            gp  = r.get('gp') or 0
+            pts = r.get('pts') or 0
+            otl = (r.get('otl') or 0) + (r.get('sol') or 0)
+            pct = round(pts / (gp * 2), 3) if gp else 0
+            lines.append(
+                f"  {json.dumps(n)}: {{ conf:'{conf[0]}', div:{json.dumps(teams[n].get('division', ''))}, "
+                f"cur:{i}, pts:{pts}, gp:{gp}, w:{wins(n)}, l:{r.get('l') or 0}, otl:{otl}, "
+                f"pct:{pct}, rem:{len(rem[n])}, proj:{round(proj[n])}, projPos:{proj_rank[n]} }},"
+            )
     lines.append('};')
     return '\n'.join(lines)
 
 
 def update_index(new_block: str) -> bool:
-    """Replace the STANDINGS block in index.html. Returns True if changed."""
     text = INDEX_FILE.read_text(encoding='utf-8')
     pattern = re.compile(
         r'//\s*──+\s*League standings.*?^const STANDINGS\s*=\s*\{.*?^\};',
@@ -211,7 +137,7 @@ def update_index(new_block: str) -> bool:
     if not pattern.search(text):
         print('ERROR: STANDINGS block not found in index.html', file=sys.stderr)
         sys.exit(1)
-    new_text = pattern.sub(new_block, text, count=1)
+    new_text = pattern.sub(lambda _: new_block, text, count=1)
     if new_text == text:
         print('STANDINGS unchanged — nothing to write.')
         return False
@@ -220,46 +146,35 @@ def update_index(new_block: str) -> bool:
     return True
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
 def main() -> None:
     for f in (INDEX_FILE, DATA_FILE):
         if not f.exists():
             print(f'ERROR: {f} not found — run from repo root', file=sys.stderr)
             sys.exit(1)
 
-    today = datetime.utcnow().strftime('%Y-%m-%d')
-
-    print('Loading team OV ratings from data.js…', flush=True)
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     team_ov = load_team_ov()
-    for t, ov in sorted(team_ov.items()):
-        print(f'  {t}: OV {ov}', flush=True)
 
-    print('\nFetching schedule from rwha.net…', flush=True)
-    html = fetch('http://www.rwha.net/Schedule.php')
-    print(f'  {len(html):,} bytes received', flush=True)
+    print('Fetching league + schedule from rwha.net…', flush=True)
+    league   = fetch_json('/auth/league.php')
+    schedule = fetch_json('/auth/schedule.php')
+    if len(league.get('teams') or []) < 20:
+        print('ERROR: league.php returned too few teams — aborting', file=sys.stderr)
+        sys.exit(1)
 
-    played, unplayed = parse_schedule(html)
-    print(f'  Played: {len(played)},  Unplayed: {len(unplayed)}', flush=True)
+    teams, rem, proj, ot_rate = build(league, schedule, team_ov)
+    print(f'  {len(schedule.get("games") or [])} games in schedule, OT rate {ot_rate:.3f}')
+    for n in sorted(teams, key=lambda n: -proj[n]):
+        r = teams[n]['record']
+        print(f'  {n:12s} {teams[n]["conference"]:9s} {r.get("pts", 0):3d} pts → proj {round(proj[n])}')
 
-    record, rem_games, proj_pts, ot_rate = build_standings(played, unplayed, team_ov)
-    print(f'  OT rate: {ot_rate:.3f}  ({int(ot_rate * len(played))}/{len(played)} games)', flush=True)
+    changed = update_index(format_block(teams, rem, proj, ot_rate, today))
 
-    print('\nProjected standings:', flush=True)
-    for t in sorted(ALL_TEAMS, key=lambda t: -proj_pts[t]):
-        r = record[t]
-        print(f'  {t:15s}  {r["w"]}-{r["l"]}-{r["otl"]}  {r["pts"]}pts → proj {round(proj_pts[t])}', flush=True)
-
-    new_block = format_standings_js(record, rem_games, proj_pts, ot_rate, today)
-    changed = update_index(new_block)
-
-    # Export vars for the commit step
     github_env = os.environ.get('GITHUB_ENV')
     if github_env:
         with open(github_env, 'a') as f:
             f.write(f'STANDINGS_CHANGED={"true" if changed else "false"}\n')
             f.write(f'STANDINGS_DATE={today}\n')
-
-    sys.exit(0)
 
 
 if __name__ == '__main__':
