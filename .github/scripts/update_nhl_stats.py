@@ -65,6 +65,24 @@ LONG_TO_SHORT = {
     'thomas': 'tom', 'timothy': 'tim', 'william': 'will', 'yevgeni': 'evgeny',
     'zachary': 'zach',
 }
+# Extra nicknames NHL.com uses (a first name can have several).  Matched both
+# ways, so "Thomas Novak" on rwha.net finds "Tommy Novak" on NHL.com.
+EXTRA_NICKNAMES = {
+    'thomas': ['tommy'], 'william': ['bill', 'billy'], 'joshua': ['josh'],
+    'joseph': ['joe', 'joey'], 'benjamin': ['ben'], 'anthony': ['tony'],
+    'andrew': ['andy', 'drew'], 'edward': ['ed', 'eddie'], 'gabriel': ['gabe'],
+    'jonathan': ['johnny', 'jonny'], 'john': ['johnny', 'jack'],
+    'zachary': ['zack', 'zac'], 'nicholas': ['nic', 'nico'], 'jacob': ['jakob'],
+    'matthew': ['matty', 'mat'], 'samuel': ['sammy'], 'timothy': ['timmy'],
+    'frederick': ['freddy', 'fred'], 'christopher': ['kris', 'topher'],
+    'alexander': ['alexandre', 'sasha'], 'daniel': ['danny'], 'joel': ['joey'],
+    'vincent': ['vinnie', 'vinny'], 'kenneth': ['kenny'], 'gregory': ['greg'],
+    'jeffrey': ['jeff'], 'steven': ['steve'], 'stephen': ['steve'],
+}
+
+# Last resort for one-off spellings: rwha.net name → NHL.com name.
+NAME_OVERRIDES: dict = {}
+
 SHORT_TO_LONG: dict = {}
 for _l, _s in LONG_TO_SHORT.items():
     SHORT_TO_LONG.setdefault(_s, []).append(_l)
@@ -92,6 +110,12 @@ def name_variants(name: str) -> list:
     if first in LONG_TO_SHORT:
         for lf in SHORT_TO_LONG.get(LONG_TO_SHORT[first], []):
             out.add(' '.join([lf] + rest))
+    # extra nicknames, both directions (Thomas ↔ Tommy)
+    for long_form, nicks in EXTRA_NICKNAMES.items():
+        if first == long_form:
+            out.update(' '.join([n] + rest) for n in nicks)
+        elif first in nicks:
+            out.add(' '.join([long_form] + rest))
     return list(out)
 
 
@@ -177,18 +201,26 @@ def goalie_entry(r: dict) -> dict:
 
 def build_index(cayenne: str, aggregate: bool):
     by_name, by_id = {}, {}
+    by_last: dict = {}
     for kind, name_key, make in (('skater', 'skaterFullName', skater_entry),
                                  ('goalie', 'goalieFullName', goalie_entry)):
         for r in fetch_bulk(kind, cayenne, aggregate):
             e = make(r)
-            by_name.setdefault(normalize(r.get(name_key, '')), e)
+            full = normalize(r.get(name_key, ''))
+            by_name.setdefault(full, e)
+            if full:
+                by_last.setdefault(full.split(' ')[-1], []).append((full, e))
             if e['id']:
                 by_id[str(e['id'])] = e
-    return by_name, by_id
+    return by_name, by_id, by_last
 
 
-def match(player: dict, by_name: dict, by_id: dict):
+FUZZY_MATCHES: set = set()
+
+
+def match(player: dict, by_name: dict, by_id: dict, by_last: dict):
     name = clean_key(player['nm'])
+    name = NAME_OVERRIDES.get(name, name)
     for v in name_variants(name):
         if v in by_name:
             return by_name[v]
@@ -197,6 +229,19 @@ def match(player: dict, by_name: dict, by_id: dict):
         last = normalize(name).split(' ')[-1] if name else ''
         if by_id[nid]['_last'] and by_id[nid]['_last'].split(' ')[-1] == last:
             return by_id[nid]
+    # Same last name and first names starting with the same 3 letters
+    # (Thomas/Tommy, Mitchell/Mitch), and only one such NHL player — catches
+    # nicknames not in the lists above.  Skipped when ambiguous, and when
+    # rwha.net's NHL id points at someone else.
+    parts = normalize(name).split(' ')
+    if len(parts) >= 2 and len(parts[0]) >= 3:
+        cands = {e['id']: e for full, e in by_last.get(parts[-1], [])
+                 if full.split(' ')[0][:3] == parts[0][:3]}
+        if len(cands) == 1:
+            e = next(iter(cands.values()))
+            if not nid or str(e['id']) == nid:
+                FUZZY_MATCHES.add(f"{name} → {e['url'].rsplit('/', 1)[-1]}")
+                return e
     return None
 
 
@@ -221,10 +266,10 @@ def write_file(path: Path, var: str, stats: dict, labels: dict) -> None:
 
 
 def run_season(cayenne: str, aggregate: bool, players: list):
-    by_name, by_id = build_index(cayenne, aggregate)
+    by_name, by_id, by_last = build_index(cayenne, aggregate)
     stats, matched, missing = {}, 0, []
     for p in players:
-        e = match(p, by_name, by_id)
+        e = match(p, by_name, by_id, by_last)
         key = clean_key(p['nm'])
         if e:
             stats[key] = {k: v for k, v in e.items() if not k.startswith('_')}
@@ -258,6 +303,8 @@ def main() -> None:
     print(f'\n{LABEL}: matched {cur_m}/{len(players)}'
           + ('  (season not started yet — no games in the NHL feed)' if cur_n == 0 else ''))
     print(f'{PREV_LABEL}: matched {prev_m}/{len(players)}')
+    if FUZZY_MATCHES:
+        print(f'\nMatched by last name + similar first name (check these): ' + '; '.join(sorted(FUZZY_MATCHES)))
     if cur_n and cur_miss:
         print(f'\nNo {LABEL} NHL stats for {len(cur_miss)} players (AHL / junior / Europe / injured / name mismatch):')
         for n in sorted(cur_miss):
