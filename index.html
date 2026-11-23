@@ -437,36 +437,36 @@ const TEAMS = Object.keys(D).sort();
 let _season = Object.values(NS).some(v => v && v.gp) ? 'cur' : 'prev';
 let _currentTeam = null, _currentType = null;
 
-// ── League standings (scraped 2026-11-22 from rwha.net) ──────
+// ── League standings (scraped 2026-11-23 from rwha.net) ──────
 // Projection model: remaining schedule × team OV win-probability (logistic, k=0.20)
-// OT rate this season: 0.255
+// OT rate this season: 0.225
 // cur = current conf rank, pts = current points, pct = points pct,
 // rem = games remaining, proj = projected final pts, projPos = projected conf rank
 const STANDINGS = {
   // Wales Conference
-  "Riots": { conf:'W', div:"Hunter", cur:1, pts:22, gp:15, w:10, l:3, otl:2, pct:0.733, rem:69, proj:98, projPos:6 },
-  "Fletushkas": { conf:'W', div:"Hunter", cur:2, pts:20, gp:15, w:8, l:3, otl:4, pct:0.667, rem:69, proj:108, projPos:2 },
-  "Boobys": { conf:'W', div:"Hunter", cur:3, pts:19, gp:15, w:9, l:5, otl:1, pct:0.633, rem:69, proj:89, projPos:7 },
-  "Bunnies": { conf:'W', div:"Cooke", cur:4, pts:18, gp:15, w:8, l:5, otl:2, pct:0.6, rem:69, proj:76, projPos:11 },
-  "Marauders": { conf:'W', div:"Hunter", cur:5, pts:18, gp:15, w:8, l:5, otl:2, pct:0.6, rem:69, proj:106, projPos:3 },
-  "Cunts": { conf:'W', div:"Cooke", cur:6, pts:17, gp:15, w:8, l:6, otl:1, pct:0.567, rem:69, proj:88, projPos:8 },
-  "Shitbirds": { conf:'W', div:"Cooke", cur:7, pts:17, gp:15, w:7, l:5, otl:3, pct:0.567, rem:69, proj:112, projPos:1 },
-  "Snowdogs": { conf:'W', div:"Hunter", cur:8, pts:17, gp:15, w:7, l:5, otl:3, pct:0.567, rem:69, proj:86, projPos:9 },
-  "Jets": { conf:'W', div:"Cooke", cur:9, pts:16, gp:15, w:8, l:7, otl:0, pct:0.533, rem:69, proj:105, projPos:4 },
-  "Oilers": { conf:'W', div:"Hunter", cur:10, pts:13, gp:15, w:6, l:8, otl:1, pct:0.433, rem:69, proj:103, projPos:5 },
-  "Chiefs": { conf:'W', div:"Cooke", cur:11, pts:9, gp:15, w:3, l:9, otl:3, pct:0.3, rem:69, proj:79, projPos:10 },
+  "Riots": { conf:'W', div:"Hunter", cur:1, pts:26, gp:19, w:12, l:5, otl:2, pct:0.684, rem:65, proj:96, projPos:6 },
+  "Fletushkas": { conf:'W', div:"Hunter", cur:2, pts:26, gp:19, w:11, l:4, otl:4, pct:0.684, rem:65, proj:108, projPos:2 },
+  "Jets": { conf:'W', div:"Cooke", cur:3, pts:22, gp:18, w:11, l:7, otl:0, pct:0.611, rem:66, proj:106, projPos:3 },
+  "Marauders": { conf:'W', div:"Hunter", cur:4, pts:22, gp:19, w:10, l:7, otl:2, pct:0.579, rem:65, proj:104, projPos:4 },
+  "Boobys": { conf:'W', div:"Hunter", cur:5, pts:21, gp:18, w:10, l:7, otl:1, pct:0.583, rem:66, proj:87, projPos:7 },
+  "Shitbirds": { conf:'W', div:"Cooke", cur:6, pts:21, gp:18, w:9, l:6, otl:3, pct:0.583, rem:66, proj:111, projPos:1 },
+  "Bunnies": { conf:'W', div:"Cooke", cur:7, pts:20, gp:18, w:9, l:7, otl:2, pct:0.556, rem:66, proj:75, projPos:11 },
+  "Cunts": { conf:'W', div:"Cooke", cur:8, pts:19, gp:19, w:9, l:9, otl:1, pct:0.5, rem:65, proj:85, projPos:8 },
+  "Snowdogs": { conf:'W', div:"Hunter", cur:9, pts:19, gp:19, w:8, l:8, otl:3, pct:0.5, rem:65, proj:84, projPos:9 },
+  "Oilers": { conf:'W', div:"Hunter", cur:10, pts:15, gp:18, w:7, l:10, otl:1, pct:0.417, rem:66, proj:100, projPos:5 },
+  "Chiefs": { conf:'W', div:"Cooke", cur:11, pts:11, gp:19, w:4, l:12, otl:3, pct:0.289, rem:65, proj:76, projPos:10 },
   // Campbell Conference
-  "Clan": { conf:'C', div:"Samuelsson", cur:1, pts:24, gp:15, w:12, l:3, otl:0, pct:0.8, rem:69, proj:94, projPos:5 },
-  "Gladiators": { conf:'C', div:"Samuelsson", cur:2, pts:24, gp:15, w:12, l:3, otl:0, pct:0.8, rem:69, proj:107, projPos:2 },
-  "Flyers": { conf:'C', div:"Lemieux", cur:3, pts:24, gp:15, w:11, l:2, otl:2, pct:0.8, rem:69, proj:107, projPos:1 },
-  "Meltdown": { conf:'C', div:"Lemieux", cur:4, pts:20, gp:15, w:10, l:5, otl:0, pct:0.667, rem:69, proj:103, projPos:3 },
-  "Mariners": { conf:'C', div:"Samuelsson", cur:5, pts:19, gp:15, w:8, l:4, otl:3, pct:0.633, rem:69, proj:90, projPos:8 },
-  "Mongoloids": { conf:'C', div:"Samuelsson", cur:6, pts:14, gp:15, w:6, l:7, otl:2, pct:0.467, rem:69, proj:91, projPos:7 },
-  "Steamers": { conf:'C', div:"Lemieux", cur:7, pts:14, gp:15, w:6, l:7, otl:2, pct:0.467, rem:69, proj:73, projPos:11 },
-  "Phantoms": { conf:'C', div:"Lemieux", cur:8, pts:13, gp:15, w:6, l:8, otl:1, pct:0.433, rem:69, proj:90, projPos:9 },
-  "Warheads": { conf:'C', div:"Samuelsson", cur:9, pts:13, gp:15, w:4, l:6, otl:5, pct:0.433, rem:69, proj:96, projPos:4 },
-  "Giants": { conf:'C', div:"Lemieux", cur:10, pts:11, gp:15, w:4, l:8, otl:3, pct:0.367, rem:69, proj:94, projPos:6 },
-  "Aces": { conf:'C', div:"Samuelsson", cur:11, pts:10, gp:15, w:4, l:9, otl:2, pct:0.333, rem:69, proj:87, projPos:10 },
+  "Clan": { conf:'C', div:"Samuelsson", cur:1, pts:32, gp:19, w:16, l:3, otl:0, pct:0.842, rem:65, proj:97, projPos:4 },
+  "Flyers": { conf:'C', div:"Lemieux", cur:2, pts:32, gp:19, w:15, l:2, otl:2, pct:0.842, rem:65, proj:110, projPos:1 },
+  "Gladiators": { conf:'C', div:"Samuelsson", cur:3, pts:28, gp:18, w:14, l:4, otl:0, pct:0.778, rem:66, proj:107, projPos:2 },
+  "Meltdown": { conf:'C', div:"Lemieux", cur:4, pts:24, gp:18, w:12, l:6, otl:0, pct:0.667, rem:66, proj:103, projPos:3 },
+  "Steamers": { conf:'C', div:"Lemieux", cur:5, pts:20, gp:19, w:9, l:8, otl:2, pct:0.526, rem:65, proj:74, projPos:11 },
+  "Mariners": { conf:'C', div:"Samuelsson", cur:6, pts:20, gp:18, w:8, l:6, otl:4, pct:0.556, rem:66, proj:87, projPos:9 },
+  "Phantoms": { conf:'C', div:"Lemieux", cur:7, pts:19, gp:18, w:9, l:8, otl:1, pct:0.528, rem:66, proj:92, projPos:6 },
+  "Mongoloids": { conf:'C', div:"Samuelsson", cur:8, pts:17, gp:19, w:7, l:9, otl:3, pct:0.447, rem:65, proj:88, projPos:8 },
+  "Giants": { conf:'C', div:"Lemieux", cur:9, pts:15, gp:19, w:6, l:10, otl:3, pct:0.395, rem:65, proj:92, projPos:5 },
+  "Warheads": { conf:'C', div:"Samuelsson", cur:10, pts:14, gp:19, w:4, l:9, otl:6, pct:0.368, rem:65, proj:91, projPos:7 },
+  "Aces": { conf:'C', div:"Samuelsson", cur:11, pts:11, gp:18, w:4, l:11, otl:3, pct:0.306, rem:66, proj:83, projPos:10 },
 };
 function ordinal(n) { return n+(n===1?'st':n===2?'nd':n===3?'rd':'th'); }
 
